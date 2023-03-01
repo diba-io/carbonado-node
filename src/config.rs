@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
@@ -104,9 +104,9 @@ pub async fn init_cfg() -> Result<()> {
     let toml = toml::to_string_pretty(&config)?;
     cfg_file.write_all(toml.as_bytes()).await?;
 
-    *SYS_CFG.write().await = Some(config);
+    *SYS_CFG.write().await = Arc::new(Some(config));
 
     Ok(())
 }
 
-pub static SYS_CFG: Lazy<RwLock<Option<SysCfg>>> = Lazy::new(|| RwLock::new(None));
+pub static SYS_CFG: Lazy<RwLock<Arc<Option<SysCfg>>>> = Lazy::new(|| RwLock::new(Arc::new(None)));

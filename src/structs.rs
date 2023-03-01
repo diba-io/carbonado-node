@@ -1,4 +1,4 @@
-use std::str::{Bytes, FromStr};
+use std::str::FromStr;
 
 use anyhow::Error;
 
@@ -24,11 +24,17 @@ impl TryFrom<&str> for Secp256k1PubKey {
     }
 }
 
-impl Secp256k1PubKey {
-    pub fn to_bytes(self) -> Vec<u8> {
+impl<'a> Secp256k1PubKey {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let Self(pk) = self;
 
         pk.serialize().to_vec()
+    }
+
+    pub fn into_inner(&self) -> secp256k1::PublicKey {
+        let Self(pk) = self;
+
+        pk.to_owned()
     }
 }
 

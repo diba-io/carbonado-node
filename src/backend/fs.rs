@@ -5,6 +5,7 @@ use carbonado::{constants::Format, fs::Header, structs::Encoded};
 use log::{error, trace};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
+use secp256k1::{ecdh::SharedSecret, Secp256k1, SecretKey};
 // use tokio::{
 //     fs::OpenOptions,
 //     io::AsyncWriteExt,
@@ -30,17 +31,33 @@ pub struct WriteSegment {
 pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3Hash> {
     // Segment files
     let segments_iter = file_bytes.par_chunks_exact(1024 * 1024);
-    let pk = pk.to_bytes();
 
     // Encode each segment
+    let pk_bytes = pk.to_bytes();
     let remainder_bytes = segments_iter.remainder();
-    let last_segment = carbonado::encode(&pk, remainder_bytes, NODE_FORMAT)?;
+    let last_segment = carbonado::encode(&pk_bytes, remainder_bytes, NODE_FORMAT)?;
 
     let mut encoded_segments = segments_iter
-        .map(|segment| carbonado::encode(&pk, segment, NODE_FORMAT))
+        .map(|segment| carbonado::encode(&pk_bytes, segment, NODE_FORMAT))
         .collect::<Result<Vec<Encoded>>>()?;
 
     encoded_segments.push(last_segment);
+
+    // Get eight storage volumes from config
+    let cfg = SYS_CFG.read().await.clone();
+
+    let cfg = match &*cfg {
+        Some(cfg) => cfg,
+        None => return Err(anyhow!("No config")),
+    };
+
+    if cfg.volumes.len() != 8 {
+        return Err(anyhow!("Eight volume paths must be configured"));
+    }
+
+    // Create a shared secret using ECDH
+    let sk = cfg.private_key;
+    let ss = SharedSecret::new(&pk.into_inner(), &sk);
 
     // Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename
     encoded_segments.par_iter().for_each(|encoded_segment| {
@@ -50,9 +67,14 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
             .par_chunks_exact(encode_info.chunk_len as usize)
             .enumerate()
             .for_each(|(chunk_index, encoded_segment_chunk)| {
+                let volume = cfg
+                    .volumes
+                    .get(chunk_index)
+                    .expect("Get one of eight volumes");
+
                 write_segment(
-                    sk,
-                    path,
+                    &ss.secret_bytes(),
+                    volume.path.clone(),
                     bao_hash.as_bytes(),
                     NODE_FORMAT,
                     encoded_segment_chunk,
