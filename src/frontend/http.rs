@@ -32,8 +32,7 @@ async fn get_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, 
     Ok((StatusCode::OK, file_bytes))
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+pub async fn main() -> Result<()> {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", "debug");
     }
