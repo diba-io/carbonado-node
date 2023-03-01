@@ -1,6 +1,8 @@
 use anyhow::Result;
-use log::info;
+use log::{error, info};
 use tokio::signal;
+
+use crate::frontend::http;
 
 pub mod backend;
 pub mod config;
@@ -18,9 +20,19 @@ pub mod prelude {
 pub async fn start() -> Result<()> {
     info!("Starting Carbonado node...");
 
-    // Determine which storage frontends to use from configuration
+    // TODO: Determine which storage frontends to use from configuration
 
     // Spawn storage frontends within their own threads
+    tokio::spawn(async {
+        match http::main().await {
+            Ok(_) => {
+                info!("Graceful HTTP server shutdown")
+            }
+            Err(e) => {
+                error!("Error in HTTP server: {e}")
+            }
+        };
+    });
 
     signal::ctrl_c().await?;
 

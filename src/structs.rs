@@ -3,7 +3,24 @@ use std::str::FromStr;
 use anyhow::Error;
 
 pub struct Blake3Hash(pub blake3::Hash);
+
+impl Blake3Hash {
+    pub fn to_string(&self) -> String {
+        let Self(hash) = self;
+
+        hash.to_string()
+    }
+}
+
 pub struct BaoHash(pub bao::Hash);
+
+impl BaoHash {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let Self(hash) = self;
+
+        hash.as_bytes().to_vec()
+    }
+}
 
 pub enum Hash {
     Blake3Bytes(Box<[u8]>),
@@ -24,7 +41,7 @@ impl TryFrom<&str> for Secp256k1PubKey {
     }
 }
 
-impl<'a> Secp256k1PubKey {
+impl Secp256k1PubKey {
     pub fn to_bytes(&self) -> Vec<u8> {
         let Self(pk) = self;
 
@@ -41,24 +58,4 @@ impl<'a> Secp256k1PubKey {
 pub enum PubKey {
     Secp256k1Bytes(Box<[u8]>),
     Secp256k1(secp256k1::PublicKey),
-}
-
-pub struct Segment {
-    hash: Hash,
-    index: u32,
-}
-
-pub struct Catalog {
-    scope: PubKey,
-    segments: Vec<Segment>,
-}
-
-/// Tasks
-pub enum Task {
-    WriteFile,
-    ReadFile,
-    EncodeSegment,
-    DecodeSegment,
-    EncodeFile,
-    DecodeFile(Catalog),
 }

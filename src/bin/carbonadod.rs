@@ -1,4 +1,4 @@
-use std::{env, error::Error, process};
+use std::{env, process};
 
 use anyhow::Result;
 use clap::Parser;
@@ -21,7 +21,7 @@ pub async fn try_main() -> Result<()> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", "info");
     }
