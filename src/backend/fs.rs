@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
 use anyhow::{anyhow, Result};
