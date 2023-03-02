@@ -20,6 +20,12 @@ impl BaoHash {
 
         hash.as_bytes().to_vec()
     }
+
+    pub fn to_string(&self) -> String {
+        let Self(hash) = self;
+
+        hash.to_string()
+    }
 }
 
 impl TryFrom<&[u8]> for BaoHash {
@@ -31,6 +37,16 @@ impl TryFrom<&[u8]> for BaoHash {
         Ok(Self(bao::Hash::try_from(hash)?))
     }
 }
+
+// impl AsRef<Path> for BaoHash {
+//     fn as_ref(&self) -> &Path {
+//         let Self(hash) = self;
+
+//         let hash = hash.to_string();
+
+//         Path::new(&hash).as_ref()
+//     }
+// }
 
 pub enum Hash {
     Blake3Bytes(Box<[u8]>),
