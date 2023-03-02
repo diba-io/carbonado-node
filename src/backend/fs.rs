@@ -1,4 +1,8 @@
-use std::{fs::OpenOptions, io::Write, path::PathBuf};
+use std::{
+    fs::OpenOptions,
+    io::{Read, Write},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, Result};
 use carbonado::{constants::Format, fs::Header, structs::Encoded};
@@ -87,14 +91,20 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     Ok(file_hash)
 }
 
-pub async fn read_file(blake3_hash: Blake3Hash) -> Result<Vec<u8>> {
-    todo!("TODO: Read file");
+pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
+    // Read catalog file bytes
+    read_catalog(blake3_hash);
 
-    // Read catalog file bytes, parse out each hash, plus the segment Carbonado format
-
-    // For each hash, read each chunk into a segment, then decode that segment
+    // // For each hash, read each chunk into a segment, then decode that segment
+    // let mut decoded_segments = hashes
+    //     .map(|segment| carbonado::decode(&[u8], &[u8], &[u8], padding: u32, format: u8))
+    //     .collect::<Result<Vec<Encoded>>>()?;
 
     // Append decoded segment to response vec
+    // let mut response_vec: Vec<u8> = decoded_segments;
+    // response_vec.push(1);
+
+    Ok(todo!())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -152,5 +162,15 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Resu
 }
 
 pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
-    todo!("TODO: Write Carbonado catalog file");
+    let mut file = OpenOptions::new().read(true).open(file_hash.to_string())?;
+
+    let mut bytes = vec![];
+    file.read_to_end(&mut bytes);
+
+    let bao_hashes = bytes
+        .chunks_exact(bao::HASH_SIZE)
+        .map(|hash_bytes| BaoHash::try_from(hash_bytes))
+        .collect::<Result<Vec<BaoHash>>>()?;
+
+    Ok(bao_hashes)
 }
