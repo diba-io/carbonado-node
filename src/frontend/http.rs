@@ -1,4 +1,4 @@
-use std::{env, net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
@@ -32,15 +32,9 @@ async fn get_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, 
     Ok((StatusCode::OK, file_bytes))
 }
 
-pub async fn main() -> Result<()> {
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "debug");
-    }
-
-    pretty_env_logger::init();
-
+pub async fn start() -> Result<()> {
     let app = Router::new()
-        .route("/file/:pk", post(post_file))
+        .route("/upload/:pk", post(post_file))
         .route("/file/:blake3_hash", get(get_file))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))

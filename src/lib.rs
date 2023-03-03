@@ -24,7 +24,7 @@ pub async fn start() -> Result<()> {
 
     // Spawn storage frontends within their own threads
     tokio::spawn(async {
-        match http::main().await {
+        match http::start().await {
             Ok(_) => {
                 info!("Graceful HTTP server shutdown")
             }

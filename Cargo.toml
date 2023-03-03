@@ -3,9 +3,6 @@ name = "carbonado-node"
 version = "0.1.0"
 edition = "2021"
 
-[build]
-rustflags = "-Ctarget-feature=+sse3,+avx,+aes"
-
 [[bin]]
 name = "carbonadod"
 
@@ -22,15 +19,16 @@ bao = "0.12.1"
 blake3 = "1.3.3"
 carbonado = "0.3.0-rc.1"
 chrono = "0.4.23"
-clap = { version = "4.0.32", features = ["derive"] }
+clap = { version = "4.1.8", features = ["derive"] }
 directories = "4.0.1"
+flexi_logger = { version = "0.25.2", features = ["colors"] }
+flexi_syslog = "0.5.2"
 hex = "0.4.3"
 human_bytes = "0.4.1"
-infer = "0.12.0"
+infer = "0.13.0"
 log = "0.4.17"
 once_cell = "1.17.1"
 par-stream = "0.10.2"
-pretty_env_logger = "0.4.0"
 rand = "0.8.5"
 rayon = "1.6.1"
 secp256k1 = { version = "0.26.0", features = [
@@ -40,7 +38,8 @@ secp256k1 = { version = "0.26.0", features = [
     "serde",
 ] }
 serde = { version = "1.0.152", features = ["derive"] }
-tokio = { version = "1.25.0", features = ["full"] }
+syslog = "6.0.1"
+tokio = { version = "1.26.0", features = ["full"] }
 toml = "0.7.2"
 tower-http = { version = "0.4.0", features = ["cors"] }
 
