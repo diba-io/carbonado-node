@@ -1,14 +1,14 @@
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use anyhow::{Error, Result};
 
 pub struct Blake3Hash(pub blake3::Hash);
 
-impl Blake3Hash {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for Blake3Hash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Self(hash) = self;
 
-        hash.to_string()
+        f.write_str(&hash.to_string())
     }
 }
 
@@ -20,11 +20,13 @@ impl BaoHash {
 
         hash.as_bytes().to_vec()
     }
+}
 
-    pub fn to_string(&self) -> String {
+impl fmt::Display for BaoHash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Self(hash) = self;
 
-        hash.to_string()
+        f.write_str(&hash.to_string())
     }
 }
 

@@ -20,7 +20,7 @@ axum = "0.6.9"
 axum-macros = "0.3.4"
 bao = "0.12.1"
 blake3 = "1.3.3"
-carbonado = { version = "0.2.5", path = "../carbonado" }
+carbonado = "0.3.0-rc.1"
 chrono = "0.4.23"
 clap = { version = "4.0.32", features = ["derive"] }
 directories = "4.0.1"
