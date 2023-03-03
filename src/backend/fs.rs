@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+
 use std::{
     fs::OpenOptions,
     io::{Read, Write},
@@ -142,16 +144,14 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
                 })
                 .collect::<Vec<u8>>();
 
-            let decoded_segment = carbonado::decode(
+            carbonado::decode(
                 &ss.secret_bytes(),
                 &segment_hash.to_bytes(),
                 &segment,
                 header.padding_len,
                 NODE_FORMAT,
             )
-            .unwrap();
-
-            decoded_segment
+            .unwrap()
         })
         .collect::<Vec<u8>>();
 
@@ -220,7 +220,7 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
 
     let bao_hashes = bytes
         .chunks_exact(bao::HASH_SIZE)
-        .map(|hash_bytes| BaoHash::try_from(hash_bytes))
+        .map(BaoHash::try_from)
         .collect::<Result<Vec<BaoHash>>>()?;
 
     Ok(bao_hashes)
