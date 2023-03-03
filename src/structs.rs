@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use anyhow::Error;
+use anyhow::{Error, Result};
 
 pub struct Blake3Hash(pub blake3::Hash);
 
@@ -21,6 +21,34 @@ impl BaoHash {
         hash.as_bytes().to_vec()
     }
 }
+
+impl fmt::Display for BaoHash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Self(hash) = self;
+
+        f.write_str(&hash.to_string())
+    }
+}
+
+impl TryFrom<&[u8]> for BaoHash {
+    type Error = Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut hash = [0_u8; 32];
+        hash.copy_from_slice(&value[0..32]);
+        Ok(Self(bao::Hash::try_from(hash)?))
+    }
+}
+
+// impl AsRef<Path> for BaoHash {
+//     fn as_ref(&self) -> &Path {
+//         let Self(hash) = self;
+
+//         let hash = hash.to_string();
+
+//         Path::new(&hash).as_ref()
+//     }
+// }
 
 pub enum Hash {
     Blake3Bytes(Box<[u8]>),

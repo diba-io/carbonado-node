@@ -1,6 +1,10 @@
 #![allow(unused_variables)]
 
-use std::{fs::OpenOptions, io::Write, path::PathBuf};
+use std::{
+    fs::OpenOptions,
+    io::{Read, Write},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, Result};
 use carbonado::{constants::Format, fs::Header, structs::Encoded};
@@ -89,14 +93,69 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     Ok(file_hash)
 }
 
-pub async fn read_file(blake3_hash: Blake3Hash) -> Result<Vec<u8>> {
-    todo!("TODO: Read file");
-
+pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
     // Read catalog file bytes, parse out each hash, plus the segment Carbonado format
+    let catalog_file = read_catalog(blake3_hash)?;
+
+    // Get eight storage volumes from config
+    let cfg = SYS_CFG.read().await.clone();
+
+    let cfg = match &*cfg {
+        Some(cfg) => cfg,
+        None => return Err(anyhow!("No config")),
+    };
+
+    if cfg.volumes.len() != 8 {
+        return Err(anyhow!("Eight volume paths must be configured"));
+    }
 
     // For each hash, read each chunk into a segment, then decode that segment
+    // Segment files
+    let file_bytes = catalog_file
+        .par_iter()
+        .flat_map(|segment_hash| {
+            let path = cfg
+                .volumes
+                .get(0)
+                .expect("Get first volume")
+                .path
+                .join(segment_hash.to_string());
+            let file = OpenOptions::new().read(true).open(path).unwrap();
+            let header = carbonado::fs::Header::try_from(file).unwrap();
 
-    // Append decoded segment to response vec
+            // Create a shared secret using ECDH
+            let sk = cfg.private_key;
+            let ss = SharedSecret::new(&header.pubkey, &sk);
+
+            let segment = cfg
+                .volumes
+                .par_iter()
+                .flat_map(|volume| {
+                    let path = volume.path.join(segment_hash.to_string());
+
+                    let mut file = OpenOptions::new().read(true).open(path).unwrap();
+
+                    let mut bytes = vec![];
+                    file.read_to_end(&mut bytes).unwrap();
+
+                    let (_header, chunk) = bytes.split_at(carbonado::fs::header_len() as usize);
+
+                    chunk.to_owned()
+                })
+                .collect::<Vec<u8>>();
+
+            carbonado::decode(
+                &ss.secret_bytes(),
+                &segment_hash.to_bytes(),
+                &segment,
+                header.padding_len,
+                NODE_FORMAT,
+            )
+            .unwrap()
+        })
+        .collect::<Vec<u8>>();
+
+    Ok(file_bytes)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -154,5 +213,15 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Resu
 }
 
 pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
-    todo!("TODO: Write Carbonado catalog file");
+    let mut file = OpenOptions::new().read(true).open(file_hash.to_string())?;
+
+    let mut bytes = vec![];
+    file.read_to_end(&mut bytes)?;
+
+    let bao_hashes = bytes
+        .chunks_exact(bao::HASH_SIZE)
+        .map(BaoHash::try_from)
+        .collect::<Result<Vec<BaoHash>>>()?;
+
+    Ok(bao_hashes)
 }
