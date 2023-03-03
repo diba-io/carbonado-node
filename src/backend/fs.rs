@@ -40,19 +40,12 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     encoded_segments.push(last_segment);
 
     // Get eight storage volumes from config
-    let cfg = SYS_CFG.read().await.clone();
-
-    let cfg = match &*cfg {
-        Some(cfg) => cfg,
-        None => return Err(anyhow!("No config")),
-    };
-
-    if cfg.volumes.len() != 8 {
+    if SYS_CFG.volumes.len() != 8 {
         return Err(anyhow!("Eight volume paths must be configured"));
     }
 
     // Create a shared secret using ECDH
-    let sk = cfg.private_key;
+    let sk = SYS_CFG.private_key;
     let ss = SharedSecret::new(&pk.into_inner(), &sk);
 
     // Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename
@@ -65,7 +58,7 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
                 .par_chunks_exact(encode_info.chunk_len as usize)
                 .enumerate()
                 .map(|(chunk_index, encoded_segment_chunk)| {
-                    let volume = cfg
+                    let volume = SYS_CFG
                         .volumes
                         .get(chunk_index)
                         .expect("Get one of eight volumes");
@@ -98,14 +91,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
     let catalog_file = read_catalog(blake3_hash)?;
 
     // Get eight storage volumes from config
-    let cfg = SYS_CFG.read().await.clone();
-
-    let cfg = match &*cfg {
-        Some(cfg) => cfg,
-        None => return Err(anyhow!("No config")),
-    };
-
-    if cfg.volumes.len() != 8 {
+    if SYS_CFG.volumes.len() != 8 {
         return Err(anyhow!("Eight volume paths must be configured"));
     }
 
@@ -114,7 +100,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
     let file_bytes = catalog_file
         .par_iter()
         .flat_map(|segment_hash| {
-            let path = cfg
+            let path = SYS_CFG
                 .volumes
                 .get(0)
                 .expect("Get first volume")
@@ -124,10 +110,10 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
             let header = carbonado::fs::Header::try_from(file).unwrap();
 
             // Create a shared secret using ECDH
-            let sk = cfg.private_key;
+            let sk = SYS_CFG.private_key;
             let ss = SharedSecret::new(&header.pubkey, &sk);
 
-            let segment = cfg
+            let segment = SYS_CFG
                 .volumes
                 .par_iter()
                 .flat_map(|volume| {
