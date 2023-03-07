@@ -10,7 +10,7 @@ use anyhow::{anyhow, Result};
 use carbonado::{constants::Format, fs::Header, structs::Encoded};
 use log::trace;
 use rayon::prelude::*;
-use secp256k1::ecdh::SharedSecret;
+use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
 
 use crate::{config::SYS_CFG, prelude::*};
 
@@ -44,6 +44,7 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     trace!("Create a shared secret using ECDH");
     let sk = SYS_CFG.private_key;
     let ss = SharedSecret::new(&pk.into_inner(), &sk);
+    let pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss.secret_bytes())?);
 
     trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
     let segment_hashes = encoded_segments
@@ -65,7 +66,7 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
                         .expect("Get one of eight volumes");
 
                     write_segment(
-                        &ss.secret_bytes(),
+                        &pk.serialize(),
                         volume.path.join(SEGMENT_DIR),
                         bao_hash.as_bytes(),
                         NODE_FORMAT,
@@ -155,7 +156,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
 
 #[allow(clippy::too_many_arguments)]
 pub fn write_segment(
-    sk: &[u8],
+    pk: &[u8],
     segment_path: PathBuf,
     hash: &[u8; 32],
     format: u8,
@@ -166,7 +167,7 @@ pub fn write_segment(
 ) -> Result<()> {
     let format = Format::try_from(format)?;
     let header = Header::new(
-        sk,
+        pk,
         hash,
         format,
         chunk_index as u8,
