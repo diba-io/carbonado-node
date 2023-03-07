@@ -12,10 +12,7 @@ use log::trace;
 use rayon::prelude::*;
 use secp256k1::ecdh::SharedSecret;
 
-use crate::{
-    config::{ENV_CFG, SYS_CFG},
-    prelude::*,
-};
+use crate::{config::SYS_CFG, prelude::*};
 
 pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3Hash> {
     trace!("Hash file, len: {}", file_bytes.len());
@@ -65,7 +62,7 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
 
                     write_segment(
                         &ss.secret_bytes(),
-                        volume.path.clone(),
+                        volume.path.join(SEGMENT_DIR),
                         bao_hash.as_bytes(),
                         NODE_FORMAT,
                         encoded_segment_chunk,
@@ -118,7 +115,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
                 .volumes
                 .par_iter()
                 .flat_map(|volume| {
-                    let path = volume.path.join(segment_hash.to_string());
+                    let path = volume.path.join(SEGMENT_DIR).join(segment_hash.to_string());
 
                     let mut file = OpenOptions::new().read(true).open(path).unwrap();
 
@@ -149,7 +146,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
 #[allow(clippy::too_many_arguments)]
 pub fn write_segment(
     sk: &[u8],
-    path: PathBuf,
+    segment_path: PathBuf,
     hash: &[u8; 32],
     format: u8,
     segment: &[u8],
@@ -167,42 +164,52 @@ pub fn write_segment(
         padding_len,
     )?;
     let header_bytes = header.try_to_vec()?;
+    let file_name = header.file_name();
+    let path = segment_path.join(file_name);
 
+    trace!("Write segment at {}", path.to_string_lossy());
     let mut file = OpenOptions::new()
         .create_new(true)
         .write(true)
-        .open(path.join(header.file_name()))?;
+        .open(&path)?;
 
     file.write_all(&header_bytes)?;
     file.write_all(segment)?;
+    file.flush()?;
 
     Ok(())
 }
 
-pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<PathBuf> {
+pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<()> {
     trace!("Write catalog");
     let contents: Vec<u8> = segment_hashes
         .iter()
         .flat_map(|bao_hash| bao_hash.to_bytes())
         .collect();
 
-    trace!("Get catalogs directory path");
-    let path = ENV_CFG
-        .data_cfg_dir
-        .join("catalogs")
-        .join(file_hash.to_string());
+    SYS_CFG
+        .volumes
+        .par_iter()
+        .map(|volume| {
+            trace!("Get catalogs directory path");
+            let path = volume.path.join(CATALOG_DIR).join(file_hash.to_string());
 
-    trace!("Open catalog file");
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&path)?;
+            trace!("Open catalog file at {}", path.to_string_lossy());
+            let mut file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&path)?;
 
-    trace!("Write file contents");
-    file.write_all(&contents)?;
+            trace!("Write file contents");
+            file.write_all(&contents)?;
+            file.flush()?;
+
+            Ok(())
+        })
+        .collect::<Result<()>>()?;
 
     trace!("Finished write_catalog");
-    Ok(path)
+    Ok(())
 }
 
 pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {

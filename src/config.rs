@@ -1,7 +1,7 @@
 use std::{
     env,
     fs::{create_dir_all, OpenOptions},
-    io::{Read, Seek, Write},
+    io::{Read, Write},
     path::PathBuf,
 };
 
@@ -11,6 +11,8 @@ use log::trace;
 use once_cell::sync::Lazy;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
+
+use crate::prelude::{CATALOG_DIR, SEGMENT_DIR};
 
 pub struct EnvCfg {
     pub data_cfg_dir: PathBuf,
@@ -36,20 +38,22 @@ pub static ENV_CFG: Lazy<EnvCfg> = Lazy::new(|| init_env_cfg().expect("Initializ
 
 #[derive(Serialize, Deserialize)]
 pub struct Volume {
-    pub path: PathBuf,  // Path to mounted volume
-    pub allocated: u64, // Allocated capacity in megabytes
+    pub path: PathBuf, // Path to mounted volume
 }
 
 #[derive(Deserialize)]
 struct SysCfgFile {
     private_key: Option<SecretKey>,
     volume: Option<Vec<Volume>>,
+    capacity: Option<u64>,
 }
 
 #[derive(Serialize)]
 pub struct SysCfg {
     pub private_key: SecretKey,
     pub volumes: Vec<Volume>,
+    /// Total allocated capacity for the node in megabytes
+    pub capacity: u64,
 }
 
 pub fn init_sys_cfg() -> Result<SysCfg> {
@@ -66,7 +70,16 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     cfg_file.read_to_string(&mut cfg_contents)?;
 
+    cfg_file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&ENV_CFG.data_cfg_file)?;
+
     let sys_cfg: SysCfgFile = toml::from_str(&cfg_contents)?;
+
+    let private_key = sys_cfg
+        .private_key
+        .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
 
     let volumes: Vec<Volume> = sys_cfg
         .volume
@@ -74,7 +87,6 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
             vols.iter()
                 .map(|vol| Volume {
                     path: PathBuf::from(&vol.path),
-                    allocated: vol.allocated,
                 })
                 .collect()
         })
@@ -82,28 +94,27 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
             (0..8)
                 .map(|i| Volume {
                     path: PathBuf::from(format!("/tmp/carbonado-{i}")),
-                    allocated: 1_000,
                 })
                 .collect()
         });
 
     for vol in volumes.iter() {
-        create_dir_all(&vol.path)?;
+        create_dir_all(&vol.path.join(SEGMENT_DIR))?;
+        create_dir_all(&vol.path.join(CATALOG_DIR))?;
     }
 
-    let private_key = sys_cfg
-        .private_key
-        .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
+    let capacity = sys_cfg.capacity.unwrap_or(1_000);
 
     let config = SysCfg {
         private_key,
         volumes,
+        capacity,
     };
 
     trace!("Write parsed config back out to config file");
     let toml = toml::to_string_pretty(&config)?;
-    cfg_file.rewind()?;
     cfg_file.write_all(toml.as_bytes())?;
+    cfg_file.flush()?;
 
     Ok(config)
 }
