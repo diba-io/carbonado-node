@@ -267,9 +267,9 @@ checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
 
 [[package]]
 name = "carbonado"
-version = "0.3.0-rc.2"
+version = "0.3.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7006acb38c4544a4f94e717bbd537abe9c0041f3dfcb560dcc48738b09a1a711"
+checksum = "656e577b2bcaa8b0c5294a1bf43e879a47801cb5c50551c712b03264e422fae7"
 dependencies = [
  "anyhow",
  "bao",

@@ -50,9 +50,13 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
         .par_iter()
         .map(|encoded_segment| {
             let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
+            trace!("Encoded bytes len: {}", encoded_bytes.len());
+
+            let encoded_chunk_size = encode_info.bytes_verifiable / 8;
+            trace!("Encoded chunk size: {}", encoded_chunk_size);
 
             encoded_bytes
-                .par_chunks_exact(encode_info.chunk_len as usize)
+                .par_chunks_exact(encoded_chunk_size as usize)
                 .enumerate()
                 .map(|(chunk_index, encoded_segment_chunk)| {
                     let volume = SYS_CFG
@@ -103,7 +107,10 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
                 .get(0)
                 .expect("Get first volume")
                 .path
-                .join(segment_hash.to_string());
+                .join(SEGMENT_DIR)
+                .join(format!("{}.c{}", segment_hash, NODE_FORMAT));
+
+            trace!("Open segment at {}", path.to_string_lossy());
             let file = OpenOptions::new().read(true).open(path).unwrap();
             let header = carbonado::fs::Header::try_from(file).unwrap();
 
@@ -115,14 +122,17 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
                 .volumes
                 .par_iter()
                 .flat_map(|volume| {
-                    let path = volume.path.join(SEGMENT_DIR).join(segment_hash.to_string());
+                    let path = volume
+                        .path
+                        .join(SEGMENT_DIR)
+                        .join(format!("{}.c{}", segment_hash, NODE_FORMAT));
 
                     let mut file = OpenOptions::new().read(true).open(path).unwrap();
 
                     let mut bytes = vec![];
                     file.read_to_end(&mut bytes).unwrap();
 
-                    let (_header, chunk) = bytes.split_at(carbonado::fs::header_len() as usize);
+                    let (header, chunk) = bytes.split_at(carbonado::fs::header_len() as usize);
 
                     chunk.to_owned()
                 })
