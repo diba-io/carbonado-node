@@ -27,7 +27,7 @@ async fn post_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoRespo
 #[axum_macros::debug_handler]
 async fn get_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, AppError> {
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
-    let file_bytes = read_file(blake3_hash).await?;
+    let file_bytes = read_file(&blake3_hash).await?;
 
     Ok((StatusCode::OK, file_bytes))
 }
