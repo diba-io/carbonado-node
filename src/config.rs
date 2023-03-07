@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
+use log::trace;
 use once_cell::sync::Lazy;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
@@ -56,7 +57,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     let mut cfg_contents = String::new();
 
-    // Creates new empty config file if it doesn't exist
+    trace!("Creates new empty config file if it doesn't exist");
     let mut cfg_file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -99,7 +100,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         volumes,
     };
 
-    // Write parsed config back out to config file
+    trace!("Write parsed config back out to config file");
     let toml = toml::to_string_pretty(&config)?;
     cfg_file.rewind()?;
     cfg_file.write_all(toml.as_bytes())?;

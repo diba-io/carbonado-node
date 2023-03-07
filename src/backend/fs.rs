@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use carbonado::{constants::Format, fs::Header, structs::Encoded};
-// use log::{error, trace};
+use log::trace;
 use rayon::prelude::*;
 use secp256k1::ecdh::SharedSecret;
 
@@ -18,18 +18,18 @@ use crate::{
 };
 
 pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3Hash> {
-    // Hash file
+    trace!("Hash file, len: {}", file_bytes.len());
     let pk_bytes = pk.to_bytes();
     let (x_only_pk, _) = pk.into_inner().x_only_public_key();
 
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
 
-    // Check if file catalog already exists
+    trace!("TODO: Check if file catalog already exists");
 
-    // Segment files
+    trace!("Segment files");
     let segments_iter = file_bytes.par_chunks_exact(SEGMENT_SIZE);
 
-    // Encode each segment
+    trace!("Encode each segment");
     let remainder_bytes = segments_iter.remainder();
     let last_segment = carbonado::encode(&pk_bytes, remainder_bytes, NODE_FORMAT)?;
 
@@ -39,16 +39,16 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
 
     encoded_segments.push(last_segment);
 
-    // Get eight storage volumes from config
+    trace!("Get eight storage volumes from config");
     if SYS_CFG.volumes.len() != 8 {
         return Err(anyhow!("Eight volume paths must be configured"));
     }
 
-    // Create a shared secret using ECDH
+    trace!("Create a shared secret using ECDH");
     let sk = SYS_CFG.private_key;
     let ss = SharedSecret::new(&pk.into_inner(), &sk);
 
-    // Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename
+    trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
     let segment_hashes = encoded_segments
         .par_iter()
         .map(|encoded_segment| {
@@ -80,23 +80,24 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
         })
         .collect::<Result<Vec<BaoHash>>>()?;
 
-    // Append each hash to its catalog, plus its format
+    trace!("Append each hash to its catalog, plus its format");
     write_catalog(&file_hash, &segment_hashes)?;
 
+    trace!("Finished write_file");
     Ok(file_hash)
 }
 
 pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
-    // Read catalog file bytes, parse out each hash, plus the segment Carbonado format
+    trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
     let catalog_file = read_catalog(blake3_hash)?;
 
-    // Get eight storage volumes from config
+    trace!("Get eight storage volumes from config");
     if SYS_CFG.volumes.len() != 8 {
         return Err(anyhow!("Eight volume paths must be configured"));
     }
 
-    // For each hash, read each chunk into a segment, then decode that segment
-    // Segment files
+    trace!("For each hash, read each chunk into a segment, then decode that segment");
+    trace!("Segment files");
     let file_bytes = catalog_file
         .par_iter()
         .flat_map(|segment_hash| {
@@ -109,7 +110,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
             let file = OpenOptions::new().read(true).open(path).unwrap();
             let header = carbonado::fs::Header::try_from(file).unwrap();
 
-            // Create a shared secret using ECDH
+            trace!("Create a shared secret using ECDH");
             let sk = SYS_CFG.private_key;
             let ss = SharedSecret::new(&header.pubkey, &sk);
 
@@ -141,6 +142,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
         })
         .collect::<Vec<u8>>();
 
+    trace!("Finish read_file");
     Ok(file_bytes)
 }
 
@@ -178,23 +180,28 @@ pub fn write_segment(
 }
 
 pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<PathBuf> {
+    trace!("Write catalog");
     let contents: Vec<u8> = segment_hashes
         .iter()
         .flat_map(|bao_hash| bao_hash.to_bytes())
         .collect();
 
+    trace!("Get catalogs directory path");
     let path = ENV_CFG
         .data_cfg_dir
         .join("catalogs")
         .join(file_hash.to_string());
 
+    trace!("Open catalog file");
     let mut file = OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(&path)?;
 
+    trace!("Write file contents");
     file.write_all(&contents)?;
 
+    trace!("Finished write_catalog");
     Ok(path)
 }
 
