@@ -213,7 +213,16 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Resu
 }
 
 pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
-    let mut file = OpenOptions::new().read(true).open(file_hash.to_string())?;
+    let path = SYS_CFG
+        .volumes
+        .get(0)
+        .expect("First volume present")
+        .path
+        .join(CATALOG_DIR)
+        .join(file_hash.to_string());
+
+    trace!("Read catalog at {}", path.to_string_lossy());
+    let mut file = OpenOptions::new().read(true).open(path)?;
 
     let mut bytes = vec![];
     file.read_to_end(&mut bytes)?;
