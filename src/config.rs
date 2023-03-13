@@ -1,15 +1,18 @@
-use std::{env, path::PathBuf, sync::Arc};
+use std::{
+    env,
+    fs::{create_dir_all, OpenOptions},
+    io::{Read, Write},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
+use log::trace;
 use once_cell::sync::Lazy;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    fs::{create_dir_all, OpenOptions},
-    io::{AsyncReadExt, AsyncWriteExt},
-    sync::RwLock,
-};
+
+use crate::prelude::{CATALOG_DIR, SEGMENT_DIR};
 
 pub struct EnvCfg {
     pub data_cfg_dir: PathBuf,
@@ -31,42 +34,52 @@ fn init_env_cfg() -> Result<EnvCfg> {
     })
 }
 
-pub static ENV_CFG: Lazy<EnvCfg> = Lazy::new(|| init_env_cfg().expect("Initial env config"));
+pub static ENV_CFG: Lazy<EnvCfg> = Lazy::new(|| init_env_cfg().expect("Initialize env config"));
 
 #[derive(Serialize, Deserialize)]
 pub struct Volume {
-    pub path: PathBuf,  // Path to mounted volume
-    pub allocated: u64, // Allocated capacity in megabytes
+    pub path: PathBuf, // Path to mounted volume
 }
 
 #[derive(Deserialize)]
 struct SysCfgFile {
     private_key: Option<SecretKey>,
     volume: Option<Vec<Volume>>,
+    capacity: Option<u64>,
 }
 
 #[derive(Serialize)]
 pub struct SysCfg {
     pub private_key: SecretKey,
     pub volumes: Vec<Volume>,
+    /// Total allocated capacity for the node in megabytes
+    pub capacity: u64,
 }
 
-pub async fn init_cfg() -> Result<()> {
-    create_dir_all(&ENV_CFG.data_cfg_dir).await?;
+pub fn init_sys_cfg() -> Result<SysCfg> {
+    create_dir_all(&ENV_CFG.data_cfg_dir)?;
 
     let mut cfg_contents = String::new();
 
-    // Creates new empty config file if it doesn't exist
+    trace!("Creates new empty config file if it doesn't exist");
     let mut cfg_file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
-        .open(&ENV_CFG.data_cfg_file)
-        .await?;
+        .open(&ENV_CFG.data_cfg_file)?;
 
-    cfg_file.read_to_string(&mut cfg_contents).await?;
+    cfg_file.read_to_string(&mut cfg_contents)?;
+
+    cfg_file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&ENV_CFG.data_cfg_file)?;
 
     let sys_cfg: SysCfgFile = toml::from_str(&cfg_contents)?;
+
+    let private_key = sys_cfg
+        .private_key
+        .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
 
     let volumes: Vec<Volume> = sys_cfg
         .volume
@@ -74,7 +87,6 @@ pub async fn init_cfg() -> Result<()> {
             vols.iter()
                 .map(|vol| Volume {
                     path: PathBuf::from(&vol.path),
-                    allocated: vol.allocated,
                 })
                 .collect()
         })
@@ -82,31 +94,29 @@ pub async fn init_cfg() -> Result<()> {
             (0..8)
                 .map(|i| Volume {
                     path: PathBuf::from(format!("/tmp/carbonado-{i}")),
-                    allocated: 1_000,
                 })
                 .collect()
         });
 
     for vol in volumes.iter() {
-        create_dir_all(&vol.path).await?;
+        create_dir_all(&vol.path.join(SEGMENT_DIR))?;
+        create_dir_all(&vol.path.join(CATALOG_DIR))?;
     }
 
-    let private_key = sys_cfg
-        .private_key
-        .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
+    let capacity = sys_cfg.capacity.unwrap_or(1_000);
 
     let config = SysCfg {
         private_key,
         volumes,
+        capacity,
     };
 
-    // Write parsed config back out to config file
+    trace!("Write parsed config back out to config file");
     let toml = toml::to_string_pretty(&config)?;
-    cfg_file.write_all(toml.as_bytes()).await?;
+    cfg_file.write_all(toml.as_bytes())?;
+    cfg_file.flush()?;
 
-    *SYS_CFG.write().await = Arc::new(Some(config));
-
-    Ok(())
+    Ok(config)
 }
 
-pub static SYS_CFG: Lazy<RwLock<Arc<Option<SysCfg>>>> = Lazy::new(|| RwLock::new(Arc::new(None)));
+pub static SYS_CFG: Lazy<SysCfg> = Lazy::new(|| init_sys_cfg().expect("Initialize sys cfg"));
