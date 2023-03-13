@@ -22,6 +22,21 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
 
     trace!("TODO: Check if file catalog already exists");
+    let path = SYS_CFG
+        .volumes
+        .get(0)
+        .expect("First volume present")
+        .path
+        .join(CATALOG_DIR)
+        .join(file_hash.to_string());
+
+    trace!("Read catalog at {}", path.to_string_lossy());
+    let is_catalog = path.to_string_lossy().len();
+    //let is_catalog = std::path::Path::new(&path).exists();
+
+    if is_catalog > 0 {
+        return Err(anyhow!("This file already exists for this user."));
+    }
 
     trace!("Segment files");
     let segments_iter = file_bytes.par_chunks_exact(SEGMENT_SIZE);
