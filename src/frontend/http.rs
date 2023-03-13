@@ -40,7 +40,7 @@ pub async fn start() -> Result<()> {
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 7000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 7000));
 
     info!("carbonado-node HTTP frontend successfully running at {addr}");
 
