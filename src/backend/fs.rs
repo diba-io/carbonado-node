@@ -194,7 +194,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
                 .expect("Get first volume")
                 .path
                 .join(SEGMENT_DIR)
-                .join(format!("{}.c{}", segment_hash, NODE_FORMAT));
+                .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
             trace!("Open segment at {}", path.to_string_lossy());
             let file = OpenOptions::new().read(true).open(path).unwrap();
@@ -211,7 +211,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
                     let path = volume
                         .path
                         .join(SEGMENT_DIR)
-                        .join(format!("{}.c{}", segment_hash, NODE_FORMAT));
+                        .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
                     let mut file = OpenOptions::new().read(true).open(path).unwrap();
 
@@ -271,7 +271,7 @@ pub fn delete_file(file_hash: &Blake3Hash) -> Result<()> {
         .join(CATALOG_DIR)
         .join(file_hash.to_string());
 
-    let rm_file = fs::remove_file(path)?;
+    fs::remove_file(path)?;
 
-    Ok(rm_file)
+    Ok(())
 }
