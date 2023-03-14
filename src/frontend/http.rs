@@ -6,14 +6,14 @@ use axum::{
     extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use log::info;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{read_file, write_file},
+    backend::fs::{delete_file, read_file, write_file},
     prelude::*,
 };
 
@@ -32,8 +32,17 @@ async fn get_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, 
     Ok((StatusCode::OK, file_bytes))
 }
 
+#[axum_macros::debug_handler]
+async fn remove_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, AppError> {
+    let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
+    delete_file(&blake3_hash)?;
+
+    Ok(())
+}
+
 pub async fn start() -> Result<()> {
     let app = Router::new()
+        .route("/remove/:blake3_hash", delete(remove_file))
         .route("/upload/:pk", post(post_file))
         .route("/file/:blake3_hash", get(get_file))
         // .route("/catalog/:blake3_hash", get(get_catalog))

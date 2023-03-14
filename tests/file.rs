@@ -54,3 +54,13 @@ async fn check_catalog_exists() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+// #[should_panic]
+async fn delete_file_by_blake3hash() -> Result<()> {
+    carbonado::utils::init_logging(RUST_LOG);
+    // don't generate key_pair but use keypair
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+
+    Ok(())
+}

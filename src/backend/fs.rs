@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
 use std::{
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::{Read, Write},
     path::PathBuf,
 };
@@ -260,4 +260,18 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
         .collect::<Result<Vec<BaoHash>>>()?;
 
     Ok(bao_hashes)
+}
+
+pub fn delete_file(file_hash: &Blake3Hash) -> Result<()> {
+    let path = SYS_CFG
+        .volumes
+        .get(0)
+        .expect("First volume present")
+        .path
+        .join(CATALOG_DIR)
+        .join(file_hash.to_string());
+
+    let rm_file = fs::remove_file(path)?;
+
+    Ok(rm_file)
 }
