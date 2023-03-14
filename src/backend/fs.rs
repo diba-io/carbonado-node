@@ -22,6 +22,21 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
 
     trace!("TODO: Check if file catalog already exists");
+    let path = SYS_CFG
+        .volumes
+        .get(0)
+        .expect("First volume present")
+        .path
+        .join(CATALOG_DIR)
+        .join(file_hash.to_string());
+
+    trace!("Read catalog at {}", path.to_string_lossy());
+    let is_catalog = path.to_string_lossy().len();
+    //let is_catalog = std::path::Path::new(&path).exists();
+
+    if is_catalog > 0 {
+        return Err(anyhow!("This file already exists for this user."));
+    }
 
     trace!("Segment files");
     let segments_iter = file_bytes.par_chunks_exact(SEGMENT_SIZE);
@@ -39,53 +54,53 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     trace!("Get eight storage volumes from config");
     if SYS_CFG.volumes.len() != 8 {
         return Err(anyhow!("Eight volume paths must be configured"));
+    } else {
+        trace!("Create a shared secret using ECDH");
+        let sk = SYS_CFG.private_key;
+        let ss = SharedSecret::new(&pk.into_inner(), &sk);
+
+        trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
+        let segment_hashes = encoded_segments
+            .par_iter()
+            .map(|encoded_segment| {
+                let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
+                trace!("Encoded bytes len: {}", encoded_bytes.len());
+
+                let encoded_chunk_size = encode_info.bytes_verifiable / 8;
+                trace!("Encoded chunk size: {}", encoded_chunk_size);
+
+                encoded_bytes
+                    .par_chunks_exact(encoded_chunk_size as usize)
+                    .enumerate()
+                    .map(|(chunk_index, encoded_segment_chunk)| {
+                        let volume = SYS_CFG
+                            .volumes
+                            .get(chunk_index)
+                            .expect("Get one of eight volumes");
+
+                        write_segment(
+                            &ss.secret_bytes(),
+                            volume.path.join(SEGMENT_DIR),
+                            bao_hash.as_bytes(),
+                            NODE_FORMAT,
+                            encoded_segment_chunk,
+                            chunk_index,
+                            encode_info.output_len,
+                            encode_info.padding_len,
+                        )
+                    })
+                    .collect::<Result<Vec<()>>>()?;
+
+                Ok(BaoHash(bao_hash.to_owned()))
+            })
+            .collect::<Result<Vec<BaoHash>>>()?;
+
+        trace!("Append each hash to its catalog, plus its format");
+        write_catalog(&file_hash, &segment_hashes)?;
+
+        debug!("Finished write_file");
+        Ok(file_hash)
     }
-
-    trace!("Create a shared secret using ECDH");
-    let sk = SYS_CFG.private_key;
-    let ss = SharedSecret::new(&pk.into_inner(), &sk);
-
-    trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
-    let segment_hashes = encoded_segments
-        .par_iter()
-        .map(|encoded_segment| {
-            let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
-            trace!("Encoded bytes len: {}", encoded_bytes.len());
-
-            let encoded_chunk_size = encode_info.bytes_verifiable / 8;
-            trace!("Encoded chunk size: {}", encoded_chunk_size);
-
-            encoded_bytes
-                .par_chunks_exact(encoded_chunk_size as usize)
-                .enumerate()
-                .map(|(chunk_index, encoded_segment_chunk)| {
-                    let volume = SYS_CFG
-                        .volumes
-                        .get(chunk_index)
-                        .expect("Get one of eight volumes");
-
-                    write_segment(
-                        &ss.secret_bytes(),
-                        volume.path.join(SEGMENT_DIR),
-                        bao_hash.as_bytes(),
-                        NODE_FORMAT,
-                        encoded_segment_chunk,
-                        chunk_index,
-                        encode_info.output_len,
-                        encode_info.padding_len,
-                    )
-                })
-                .collect::<Result<Vec<()>>>()?;
-
-            Ok(BaoHash(bao_hash.to_owned()))
-        })
-        .collect::<Result<Vec<BaoHash>>>()?;
-
-    trace!("Append each hash to its catalog, plus its format");
-    write_catalog(&file_hash, &segment_hashes)?;
-
-    debug!("Finished write_file");
-    Ok(file_hash)
 }
 
 #[allow(clippy::too_many_arguments)]
