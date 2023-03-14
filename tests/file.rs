@@ -1,6 +1,6 @@
 use std::fs;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use carbonado_node::{backend::fs::write_file, structs::Secp256k1PubKey};
 use log::{debug, info};
 use rand::thread_rng;
@@ -37,6 +37,7 @@ async fn write_read() -> Result<()> {
 }
 
 #[tokio::test]
+// #[should_panic]
 async fn check_catalog_exists() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
@@ -46,9 +47,10 @@ async fn check_catalog_exists() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} bytes read", file_bytes.len());
 
-    info!("Writing file");
-    let blake3_hash = write_file(Secp256k1PubKey(pk), &file_bytes).await?;
+    info!("Writing file if not exists");
+    let blake3_hash = write_file(Secp256k1PubKey(pk), &file_bytes).await.is_err();
     debug!("Skip writing file as File hash exists: {blake3_hash}");
+    assert!(blake3_hash);
 
     Ok(())
 }
