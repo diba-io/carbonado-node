@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
             error!("{}", err);
             err.chain()
                 .skip(1)
-                .for_each(|cause| eprintln!("Error: {}", cause));
+                .for_each(|cause| eprintln!("Error: {cause}"));
 
             handle.flush();
             process::exit(1);
