@@ -7,7 +7,11 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use carbonado::{constants::Format, fs::Header, structs::Encoded};
+use carbonado::{
+    constants::{Format, FEC_M},
+    fs::Header,
+    structs::Encoded,
+};
 use log::{debug, trace};
 use rayon::prelude::*;
 use secp256k1::ecdh::SharedSecret;
@@ -37,7 +41,7 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
     encoded_segments.push(last_segment);
 
     trace!("Get eight storage volumes from config");
-    if SYS_CFG.volumes.len() != 8 {
+    if SYS_CFG.volumes.len() != FEC_M {
         return Err(anyhow!("Eight volume paths must be configured"));
     }
 
@@ -52,11 +56,11 @@ pub async fn write_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3
             let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
             trace!("Encoded bytes len: {}", encoded_bytes.len());
 
-            let encoded_chunk_size = encode_info.bytes_verifiable / 8;
+            let encoded_chunk_size = encode_info.bytes_verifiable as usize / FEC_M;
             trace!("Encoded chunk size: {}", encoded_chunk_size);
 
             encoded_bytes
-                .par_chunks_exact(encoded_chunk_size as usize)
+                .par_chunks_exact(encoded_chunk_size)
                 .enumerate()
                 .map(|(chunk_index, encoded_segment_chunk)| {
                     let volume = SYS_CFG
@@ -164,7 +168,7 @@ pub async fn read_file(blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
     let catalog_file = read_catalog(blake3_hash)?;
 
     trace!("Get eight storage volumes from config");
-    if SYS_CFG.volumes.len() != 8 {
+    if SYS_CFG.volumes.len() != FEC_M {
         return Err(anyhow!("Eight volume paths must be configured"));
     }
 
