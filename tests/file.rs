@@ -22,11 +22,11 @@ async fn write_read() -> Result<()> {
     debug!("{} bytes read", file_bytes.len());
 
     info!("Writing file");
-    let blake3_hash = write_file(Secp256k1PubKey(pk), &file_bytes).await?;
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
     debug!("File hash: {blake3_hash}");
 
     info!("Reading file by hash");
-    let new_file_bytes = read_file(&blake3_hash).await?;
+    let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
     debug!("{} new bytes read", new_file_bytes.len());
 
     assert_eq!(
