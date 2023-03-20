@@ -251,7 +251,7 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
                 .expect("Get first volume")
                 .path
                 .join(SEGMENT_DIR)
-                .join(format!("{}.c{}", segment_hash, NODE_FORMAT));
+                .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
             let chunk_file = OpenOptions::new().read(true).open(chunk_path).unwrap();
             let header = Header::try_from(chunk_file).unwrap();
@@ -263,7 +263,7 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
                     let path = volume
                         .path
                         .join(SEGMENT_DIR)
-                        .join(format!("{}.c{}", segment_hash, NODE_FORMAT));
+                        .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
                     let mut file = OpenOptions::new().read(true).open(path).unwrap();
 
