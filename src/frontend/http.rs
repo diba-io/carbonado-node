@@ -19,23 +19,26 @@ use crate::{
 
 async fn post_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    let Blake3Hash(hash) = write_file(pk, &body).await?;
+    let Blake3Hash(hash) = write_file(&pk, &body).await?;
 
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
 #[axum_macros::debug_handler]
-async fn get_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, AppError> {
+async fn get_file(
+    Path((pk, blake3_hash)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
-    let file_bytes = read_file(&blake3_hash).await?;
+    let file_bytes = read_file(&pk, &blake3_hash).await?;
 
     Ok((StatusCode::OK, file_bytes))
 }
 
 pub async fn start() -> Result<()> {
     let app = Router::new()
-        .route("/upload/:pk", post(post_file))
-        .route("/file/:blake3_hash", get(get_file))
+        .route("/store/:pk", post(post_file))
+        .route("/retrieve/:pk/:blake3_hash", get(get_file))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
