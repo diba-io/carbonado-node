@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     // Debug
     #[cfg(debug_assertions)]
     {
-        let logger = Logger::try_with_str("debug, carbonado=debug")?
+        let logger = Logger::try_with_str("trace, carbonado_node=trace, carbonado=trace")?
             .adaptive_format_for_stderr(AdaptiveFormat::Detailed)
             .adaptive_format_for_stdout(AdaptiveFormat::Detailed)
             .set_palette("196;208;10;7;8".to_owned())

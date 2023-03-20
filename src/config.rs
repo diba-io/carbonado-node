@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
-use log::trace;
+use log::{info, trace};
 use once_cell::sync::Lazy;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
@@ -44,7 +44,7 @@ pub struct Volume {
 #[derive(Deserialize)]
 struct SysCfgFile {
     private_key: Option<SecretKey>,
-    volume: Option<Vec<Volume>>,
+    volumes: Option<Vec<Volume>>,
     capacity: Option<u64>,
 }
 
@@ -61,7 +61,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     let mut cfg_contents = String::new();
 
-    trace!("Creates new empty config file if it doesn't exist");
+    trace!("Create new empty config file if it doesn't exist");
     let mut cfg_file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -70,6 +70,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     cfg_file.read_to_string(&mut cfg_contents)?;
 
+    trace!("Overwrite existing file to preserve consistency");
     cfg_file = OpenOptions::new()
         .write(true)
         .truncate(true)
@@ -82,7 +83,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
 
     let volumes: Vec<Volume> = sys_cfg
-        .volume
+        .volumes
         .map(|vols| {
             vols.iter()
                 .map(|vol| Volume {
@@ -113,6 +114,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     trace!("Write parsed config back out to config file");
     let toml = toml::to_string_pretty(&config)?;
+    info!("Config: {toml}");
     cfg_file.write_all(toml.as_bytes())?;
     cfg_file.flush()?;
 
