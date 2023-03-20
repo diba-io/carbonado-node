@@ -9,7 +9,7 @@ use log::{debug, info};
 use rand::thread_rng;
 use secp256k1::generate_keypair;
 
-const RUST_LOG: &str = "carbonad_node=trace,carbonado=trace,file=trace";
+const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 
 #[tokio::test]
 async fn write_read() -> Result<()> {
