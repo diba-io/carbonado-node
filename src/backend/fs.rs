@@ -43,7 +43,7 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
     trace!("Read catalog at {}", &path.to_string_lossy());
 
     let is_catalog = std::path::Path::new(&path).file_name();
-    trace!("Catalog File: does it exist?: {:?}", is_catalog);
+    trace!("Catalog File: file_name: {:?}", is_catalog);
     if is_catalog.is_some() {
         return Err(anyhow!("This file already exists for this user."));
     }
