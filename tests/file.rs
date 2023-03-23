@@ -74,6 +74,7 @@ async fn write_delete_file() -> Result<()> {
     let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
     debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
 
+    debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
     info!("Write/Delete test finished successfully!");
 
     Ok(())
