@@ -261,43 +261,41 @@ pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
     trace!(">>>>>file_hash::   {}", file_hash);
 
-    for vol in &SYS_CFG.volumes {
-        let seg_path = &vol
-            .path
-            .join(SEGMENT_DIR)
-            .join(format!("{file_hash}.c{NODE_FORMAT}"));
-        let seg = &vol.path.join(SEGMENT_DIR);
-        trace!("VOLUME SEGMENT REMOVE FILE paths : {:?}", seg);
-        remove_dir_segments(seg).unwrap();
-    }
+    let all: usize = SYS_CFG.volumes.len();
+    trace!("all VOLUMES: {}", all);
+
+    // Ok(())
+    let all: usize = SYS_CFG.volumes.len();
+    trace!("new all VOLUMES: {}", all);
 
     for vol in &SYS_CFG.volumes {
         let seg_path = &vol.path.join(SEGMENT_DIR).join(file_hash.to_string());
-        let seg = &vol.path.join(CATALOG_DIR);
-        trace!("VOLUME CATALOG REMOVE FILE paths : {:?}", seg);
-        remove_dir_catalogs(seg).unwrap();
+        let seg = &vol.path.join(SEGMENT_DIR);
+        remove_dir_contents(seg).unwrap();
     }
 
     let all: usize = SYS_CFG.volumes.len();
     trace!("POST delete VOLUMES: {}", all);
 
+    for vol in &SYS_CFG.volumes {
+        let cat_path = &vol.path.join(CATALOG_DIR).join(file_hash.to_string());
+        let cat = &vol.path.join(CATALOG_DIR);
+        remove_dir_catalogs(cat_path.to_path_buf()).unwrap();
+    }
     Ok(())
 }
 
-fn remove_dir_segments<P: AsRef<Path>>(path: P) -> io::Result<()> {
+fn remove_dir_contents<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    trace!(">>> remove_dir_contents");
     for entry in fs::read_dir(path)? {
-        trace!("Delete Segment File at {:?}", &entry);
-        // trace!("Delete Segment File at {:?}", entry?.path());
+        trace!("Delete Segment File at {:?}", entry);
         fs::remove_file(entry?.path())?;
     }
     Ok(())
 }
 
-fn remove_dir_catalogs<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    for entry in fs::read_dir(path)? {
-        trace!("Delete Catalog at {:?}", &entry);
-        // trace!("Delete Segment File at {:?}", entry?.path());
-        fs::remove_file(entry?.path())?;
-    }
+fn remove_dir_catalogs(path: PathBuf) -> io::Result<()> {
+    trace!("Delete Catalog File {:?}", path);
+    //fs::remove_file(path)?;
     Ok(())
 }
