@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 
 use std::{
-    fs::{self, remove_file, OpenOptions},
+    fs::{self, OpenOptions},
     io::{self, Read, Write},
     //path::Path,
     path::{Path, PathBuf},

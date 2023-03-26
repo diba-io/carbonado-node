@@ -35,17 +35,8 @@ async fn get_file(
     Ok((StatusCode::OK, file_bytes))
 }
 
-#[axum_macros::debug_handler]
-async fn remove_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
-    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    let file_bytes = delete_file(pk, &body)?;
-
-    Ok((StatusCode::OK, file_bytes))
-}
-
 pub async fn start() -> Result<()> {
     let app = Router::new()
-        .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         // .route("/catalog/:blake3_hash", get(get_catalog))
