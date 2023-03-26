@@ -1,9 +1,9 @@
-use std::{fs, str::FromStr};
+use std::fs;
 
 use anyhow::Result;
 use carbonado_node::{
-    backend::fs::{delete_file, read_file, write_file},
-    structs::{Blake3Hash, Secp256k1PubKey},
+    backend::fs::{delete_file, write_file},
+    structs::Secp256k1PubKey,
 };
 use log::{debug, info};
 use rand::thread_rng;
