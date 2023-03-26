@@ -1,4 +1,4 @@
-use std::{fs, net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
@@ -10,7 +10,7 @@ use axum::{
     Router,
 };
 use log::info;
-use rand::distributions::Slice;
+
 use tower_http::cors::CorsLayer;
 
 use crate::{
