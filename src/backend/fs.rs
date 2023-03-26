@@ -280,7 +280,7 @@ pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
     for vol in &SYS_CFG.volumes {
         let cat_path = &vol.path.join(CATALOG_DIR).join(file_hash.to_string());
         let cat = &vol.path.join(CATALOG_DIR);
-        remove_dir_catalogs(cat_path.to_path_buf()).unwrap();
+        remove_dir_catalogs(cat.to_path_buf(), cat_path.to_path_buf()).unwrap();
     }
     Ok(())
 }
@@ -294,8 +294,10 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P) -> io::Result<()> {
     Ok(())
 }
 
-fn remove_dir_catalogs(path: PathBuf) -> io::Result<()> {
-    trace!("Delete Catalog File {:?}", path);
-    //fs::remove_file(path)?;
+fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
+    for entry in fs::read_dir(path)? {
+        trace!("Delete CATALOG File at {:?}", entry);
+        fs::remove_file(entry?.path())?;
+    }
     Ok(())
 }
