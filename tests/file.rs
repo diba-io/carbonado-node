@@ -73,7 +73,7 @@ async fn write_delete_file() -> Result<()> {
 
     if blake3_hash {
         info!(
-            "Write File in order to Delete:: blake3_hash:: {} ",
+            "Write File in order to Test Delete File as blake3_hash:: {} ",
             blake3_hash.to_string()
         );
     }

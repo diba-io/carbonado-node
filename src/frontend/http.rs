@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{fs, net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use log::info;
+use rand::distributions::Slice;
 use tower_http::cors::CorsLayer;
 
 use crate::{
@@ -35,8 +36,18 @@ async fn get_file(
     Ok((StatusCode::OK, file_bytes))
 }
 
+#[axum_macros::debug_handler]
+async fn remove_file(
+    Path((pk, blake3_hash)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
+    delete_file(pk, blake3_hash.as_bytes())?;
+    Ok(())
+}
+
 pub async fn start() -> Result<()> {
     let app = Router::new()
+        .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         // .route("/catalog/:blake3_hash", get(get_catalog))
