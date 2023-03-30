@@ -1,4 +1,10 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{
+    fs,
+    fs::File,
+    io::{BufReader, Read, Write},
+    net::SocketAddr,
+    str::FromStr,
+};
 
 use anyhow::Result;
 use axum::{
@@ -9,8 +15,10 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use log::info;
+use log::{debug, info, trace};
 
+use rand::thread_rng;
+use secp256k1::generate_keypair;
 use tower_http::cors::CorsLayer;
 
 use crate::{
@@ -19,9 +27,8 @@ use crate::{
 };
 
 async fn post_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
-    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    let Blake3Hash(hash) = write_file(&pk, &body).await?;
-
+    let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
+    let Blake3Hash(hash) = write_file(_pk, &body).await?;
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
@@ -42,7 +49,7 @@ async fn remove_file(
 ) -> Result<impl IntoResponse, AppError> {
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
     delete_file(pk, blake3_hash.as_bytes())?;
-    Ok(())
+    Ok((StatusCode::OK, blake3_hash))
 }
 
 pub async fn start() -> Result<()> {
