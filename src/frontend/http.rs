@@ -1,7 +1,4 @@
 use std::{
-    fs,
-    fs::File,
-    io::{BufReader, Read, Write},
     net::SocketAddr,
     str::FromStr,
 };
@@ -15,10 +12,10 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use log::{debug, info, trace};
+use log::{info};
 
-use rand::thread_rng;
-use secp256k1::generate_keypair;
+
+
 use tower_http::cors::CorsLayer;
 
 use crate::{
