@@ -1,7 +1,4 @@
-use std::{
-    net::SocketAddr,
-    str::FromStr,
-};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
@@ -12,9 +9,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use log::{info};
-
-
+use log::{debug, info, trace};
 
 use tower_http::cors::CorsLayer;
 
