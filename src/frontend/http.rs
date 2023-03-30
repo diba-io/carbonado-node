@@ -9,7 +9,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use log::{debug, info, trace};
+use log::info;
 
 use tower_http::cors::CorsLayer;
 
