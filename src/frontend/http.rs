@@ -6,21 +6,21 @@ use axum::{
     extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use log::info;
+
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{read_file, write_file},
+    backend::fs::{delete_file, read_file, write_file},
     prelude::*,
 };
 
 async fn post_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
-    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    let Blake3Hash(hash) = write_file(&pk, &body).await?;
-
+    let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
+    let Blake3Hash(hash) = write_file(_pk, &body).await?;
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
@@ -35,15 +35,25 @@ async fn get_file(
     Ok((StatusCode::OK, file_bytes))
 }
 
+#[axum_macros::debug_handler]
+async fn remove_file(
+    Path((pk, blake3_hash)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
+    delete_file(pk, blake3_hash.as_bytes())?;
+    Ok((StatusCode::OK, blake3_hash))
+}
+
 pub async fn start() -> Result<()> {
     let app = Router::new()
+        .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 7000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 7000));
 
     info!("carbonado-node HTTP frontend successfully running at {addr}");
 
