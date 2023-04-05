@@ -1,22 +1,34 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, slice::SliceIndex, str::FromStr};
 
 use anyhow::Result;
+//use axum::extract::FromRequestParts;
 use axum::{
+    async_trait,
     body::Bytes,
     extract::Path,
-    http::StatusCode,
+    extract::{Extension, FromRequestParts, Query, RawPathParams, State},
+    http::{request::Parts, StatusCode},
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Router,
 };
-use log::info;
+use axum_macros::FromRequestParts;
+use log::{debug, info};
 
+use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
 use crate::{
     backend::fs::{delete_file, read_file, write_file},
     prelude::*,
 };
+
+#[derive(Deserialize, std::fmt::Debug)]
+struct FileSlice {
+    black3_hash: String,
+    index_start: u64,
+    range_end: u64,
+}
 
 async fn post_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
     let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
@@ -35,6 +47,13 @@ async fn get_file(
     Ok((StatusCode::OK, file_bytes))
 }
 
+async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
+    debug!("my_params :: blake {:?} ", &my_params.black3_hash);
+    debug!("my_params :: start {:?} ", &my_params.index_start);
+    debug!("my_params :: end {:?} ", &my_params.range_end);
+    Ok((StatusCode::OK, my_params.black3_hash.clone()))
+}
+
 #[axum_macros::debug_handler]
 async fn remove_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
@@ -49,6 +68,12 @@ pub async fn start() -> Result<()> {
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
+        .route(
+            // "/slice/:blake3_hash/:slice_index/:slice_range",
+            "/slice/",
+            //"/slice",
+            get(get_slice),
+        )
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());

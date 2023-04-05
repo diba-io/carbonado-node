@@ -2,7 +2,7 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, Cursor, Read, Write},
     //path::Path,
     path::{Path, PathBuf},
 };
@@ -338,18 +338,19 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
 pub async fn read_slices(
     pk: &Secp256k1PubKey,
     blake3_hash: &Blake3Hash,
-    start_index: String,
-    range_end: String,
+    slice_start: u64, //let slice_start = 65536;
+    slice_len: u64,   // let slice_len = 8192;
 ) -> Result<u8> {
     debug!("Read file by hash: {}", blake3_hash.to_string());
 
-    use std::io::prelude::*;
-
+    // DEFINE INPUT IN PLACE OF
     let input = vec![0; 1_000_000];
-    let (encoded, hash) = bao::encode::encode(&input);
+
+    // let (encoded, hash) = bao::encode::encode(&input);
+    let (encoded, hash) = bao::encode::encode(input);
     // These parameters are multiples of the chunk size, which avoids unnecessary overhead.
-    let slice_start = 65536;
-    let slice_len = 8192;
+    // let slice_start = 65536;
+    // let slice_len = 8192;
     let encoded_cursor = std::io::Cursor::new(&encoded);
     let mut extractor = bao::encode::SliceExtractor::new(encoded_cursor, slice_start, slice_len);
     let mut slice = Vec::new();
