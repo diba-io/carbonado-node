@@ -2,7 +2,7 @@ use std::fs;
 
 use anyhow::Result;
 use carbonado_node::{
-    backend::fs::{delete_file, write_file},
+    backend::fs::{delete_file, read_catalog, read_slices, write_file},
     structs::Secp256k1PubKey,
 };
 use log::{debug, info};
@@ -25,14 +25,14 @@ const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 //     let blake3_hash = write_file(Secp256k1PubKey(pk), &file_bytes).await?;
 //     debug!("File hash: {blake3_hash}");
 
-//     // info!("Reading file by hash");
-//     // let new_file_bytes = read_file(&blake3_hash).await?;
-//     // debug!("{} new bytes read", new_file_bytes.len());
+// info!("Reading file by hash");
+// let new_file_bytes = read_file(&blake3_hash).await?;
+// debug!("{} new bytes read", new_file_bytes.len());
 
-//     // assert_eq!(
-//     //     file_bytes, new_file_bytes,
-//     //     "Written and read file matches bytes"
-//     // );
+// assert_eq!(
+//     file_bytes, new_file_bytes,
+//     "Written and read file matches bytes"
+// );
 
 //     // info!("File write/read test finished successfully!");
 
@@ -51,14 +51,19 @@ async fn check_catalog_exists() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
+    // write file returns a filehash
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
-    if blake3_hash {
-        info!(
-            "Write File in order to Test Delete File as blake3_hash:: {} ",
-            blake3_hash.to_string()
-        );
-    }
+    // if blake3_hash {
+    //     info!(
+    //         "Write File in order to Test Delete File as blake3_hash:: {} ",
+    //         blake3_hash.to_string()
+    //     );
+    // }
+
+    info!("Reading file by hash");
+    let new_file_bytes = read_catalog(&blake3_hash)?;
+    debug!("{} new bytes read", new_file_bytes.len());
 
     let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
     debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
@@ -87,6 +92,40 @@ async fn check_catalog_exists() -> Result<()> {
 
 //     Ok(())
 // }
+
+#[tokio::test]
+// #[should_panic]
+async fn get_slice() -> Result<()> {
+    carbonado::utils::init_logging(RUST_LOG);
+
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+
+    info!("Reading file bytes");
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    debug!("{} bytes read", file_bytes.len());
+
+    // Write file to get hash in order to read catalog
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    debug!("FROM WRITE FILE: BLACK3HASH: {}", blake3_hash);
+
+    info!("Reading file by hash");
+    let read_new_file_bytes = read_catalog(&blake3_hash)?;
+    debug!(
+        "FROM CATALOG :: {} new bytes read",
+        read_new_file_bytes.len()
+    );
+
+    let slice_start: u64 = 65536;
+    let slice_len: u64 = 8192;
+
+    let read_the_slice = read_slices(&Secp256k1PubKey(pk), &blake3_hash, slice_start, slice_len)
+        .await
+        .is_ok();
+
+    assert!(read_the_slice);
+
+    Ok(())
+}
 
 #[tokio::test]
 async fn read_write_delete_file() -> Result<()> {

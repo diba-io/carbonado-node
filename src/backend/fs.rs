@@ -110,50 +110,51 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
         write_catalog(&file_hash, &segment_hashes)?;
 
         debug!("Finished write_file");
+        /* WARNING THIS CASUES ALL CODE THERE AFTER TO NOT BE CALLED */
         return Ok(file_hash);
     }
 
-    trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
-    let segment_hashes = encoded_segments
-        .par_iter()
-        .map(|encoded_segment| {
-            let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
-            trace!("Encoded bytes len: {}", encoded_bytes.len());
+    // trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
+    // let segment_hashes = encoded_segments
+    //     .par_iter()
+    //     .map(|encoded_segment| {
+    //         let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
+    //         trace!("Encoded bytes len: {}", encoded_bytes.len());
 
-            let encoded_chunk_size = encode_info.bytes_verifiable as usize / FEC_M;
-            trace!("Encoded chunk size: {}", encoded_chunk_size);
+    //         let encoded_chunk_size = encode_info.bytes_verifiable as usize / FEC_M;
+    //         trace!("Encoded chunk size: {}", encoded_chunk_size);
 
-            encoded_bytes
-                .par_chunks_exact(encoded_chunk_size)
-                .enumerate()
-                .map(|(chunk_index, encoded_segment_chunk)| {
-                    let volume = SYS_CFG
-                        .volumes
-                        .get(chunk_index)
-                        .expect("Get one of eight volumes");
+    //         encoded_bytes
+    //             .par_chunks_exact(encoded_chunk_size)
+    //             .enumerate()
+    //             .map(|(chunk_index, encoded_segment_chunk)| {
+    //                 let volume = SYS_CFG
+    //                     .volumes
+    //                     .get(chunk_index)
+    //                     .expect("Get one of eight volumes");
 
-                    write_segment(
-                        &ss.secret_bytes(),
-                        volume.path.join(SEGMENT_DIR),
-                        bao_hash.as_bytes(),
-                        NODE_FORMAT,
-                        encoded_segment_chunk,
-                        chunk_index,
-                        encode_info.output_len,
-                        encode_info.padding_len,
-                    )
-                })
-                .collect::<Result<Vec<()>>>()?;
+    //                 write_segment(
+    //                     &ss.secret_bytes(),
+    //                     volume.path.join(SEGMENT_DIR),
+    //                     bao_hash.as_bytes(),
+    //                     NODE_FORMAT,
+    //                     encoded_segment_chunk,
+    //                     chunk_index,
+    //                     encode_info.output_len,
+    //                     encode_info.padding_len,
+    //                 )
+    //             })
+    //             .collect::<Result<Vec<()>>>()?;
 
-            Ok(BaoHash(bao_hash.to_owned()))
-        })
-        .collect::<Result<Vec<BaoHash>>>()?;
+    //         Ok(BaoHash(bao_hash.to_owned()))
+    //     })
+    //     .collect::<Result<Vec<BaoHash>>>()?;
 
-    trace!("Append each hash to its catalog, plus its format");
-    write_catalog(&file_hash, &segment_hashes)?;
+    // trace!("Append each hash to its catalog, plus its format");
+    // write_catalog(&file_hash, &segment_hashes)?;
 
-    debug!("Finished write_file");
-    Ok(file_hash)
+    // debug!("Finished write_file");
+    // Ok(file_hash)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -340,9 +341,19 @@ pub async fn read_slices(
     blake3_hash: &Blake3Hash,
     slice_start: u64, //let slice_start = 65536;
     slice_len: u64,   // let slice_len = 8192;
-) -> Result<u8> {
-    debug!("Read file by hash: {}", blake3_hash.to_string());
+) -> Result<()> {
+    //debug!("Read file by hash: {}", blake3_hash.to_string());
 
+    for vol in &SYS_CFG.volumes {
+        //let cat_path = &vol.path.join(CATALOG_DIR).join(file_hash.to_string());
+        let cat = &vol.path.join(CATALOG_DIR);
+        //remove_dir_catalogs(cat.to_path_buf(), cat_path.to_path_buf()).unwrap();
+        trace!("Search Catalog Content for  File at {:?}", cat);
+    }
+
+    trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
+    let catalog_file_as_input = read_catalog(blake3_hash)?;
+    // let input = catalog_file_as_input;
     // DEFINE INPUT IN PLACE OF
     let input = vec![0; 1_000_000];
 
@@ -356,11 +367,13 @@ pub async fn read_slices(
     let mut slice = Vec::new();
     extractor.read_to_end(&mut slice)?;
 
+    trace!(">>>> <<<< slice_len {:?}", slice_len);
+
     // The slice includes some overhead to store the necessary subtree hashes.
 
-    assert_eq!(16776, slice.len());
+    //assert_eq!(16776, slice.len());
 
-    Ok(slice.len().try_into().unwrap())
+    Ok(())
 }
 
 pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {

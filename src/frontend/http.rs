@@ -19,13 +19,16 @@ use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, write_file},
+    backend::fs::{delete_file, read_file, read_slices, write_file},
     prelude::*,
 };
 
 #[derive(Deserialize, std::fmt::Debug)]
+
+// can use Options Here.
 struct FileSlice {
-    black3_hash: String,
+    pk: String,
+    //black3_hash: String,
     index_start: u64,
     range_end: u64,
 }
@@ -48,10 +51,21 @@ async fn get_file(
 }
 
 async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
-    debug!("my_params :: blake {:?} ", &my_params.black3_hash);
-    debug!("my_params :: start {:?} ", &my_params.index_start);
-    debug!("my_params :: end {:?} ", &my_params.range_end);
-    Ok((StatusCode::OK, my_params.black3_hash.clone()))
+    //debug!("my_params :: blake {:?} ", &my_params.pk);
+    //debug!("my_params :: blake {:?} ", &my_params.black3_hash); // this must be derived locally
+    //debug!("my_params :: start {:?} ", &my_params.index_start);
+    //debug!("my_params :: end {:?} ", &my_params.range_end);
+
+    //let slice_start = 65536;
+    // let slice_len = 8192;
+    //blake3_hash: &Blake3Hash,
+    let pk = Secp256k1PubKey::try_from(my_params.pk.as_str())?;
+
+    // WHERE TO GET BLAKE3 HASH FORM?
+    // TRY FROM CATALOG
+    //let black3_hash =
+    //let read_the_slice = read_slices(&pk, my_params.index_start, my_params.range_end).await;
+    Ok((StatusCode::OK, "read_the_slice"))
 }
 
 #[axum_macros::debug_handler]
@@ -68,12 +82,7 @@ pub async fn start() -> Result<()> {
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
-        .route(
-            // "/slice/:blake3_hash/:slice_index/:slice_range",
-            "/slice/",
-            //"/slice",
-            get(get_slice),
-        )
+        .route("/slice/", get(get_slice))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
