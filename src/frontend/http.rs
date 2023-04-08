@@ -51,15 +51,15 @@ async fn get_file(
 }
 
 async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
-    //debug!("my_params :: blake {:?} ", &my_params.pk);
+    debug!("my_params :: blake {:?} ", &my_params.pk);
     //debug!("my_params :: blake {:?} ", &my_params.black3_hash); // this must be derived locally
-    //debug!("my_params :: start {:?} ", &my_params.index_start);
-    //debug!("my_params :: end {:?} ", &my_params.range_end);
+    debug!("my_params :: start {:?} ", &my_params.index_start);
+    debug!("my_params :: end {:?} ", &my_params.range_end);
 
     //let slice_start = 65536;
     // let slice_len = 8192;
     //blake3_hash: &Blake3Hash,
-    let pk = Secp256k1PubKey::try_from(my_params.pk.as_str())?;
+    //let pk = Secp256k1PubKey::try_from(my_params.pk.as_str())?;
 
     // WHERE TO GET BLAKE3 HASH FORM?
     // TRY FROM CATALOG

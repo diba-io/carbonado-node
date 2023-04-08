@@ -2,8 +2,8 @@ use std::fs;
 
 use anyhow::Result;
 use carbonado_node::{
-    backend::fs::{delete_file, read_catalog, read_slices, write_file},
-    structs::Secp256k1PubKey,
+    backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
+    structs::{BaoHash, Secp256k1PubKey},
 };
 use log::{debug, info};
 use rand::thread_rng;
@@ -11,33 +11,25 @@ use secp256k1::generate_keypair;
 
 const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 
-// #[tokio::test]
-// async fn write_read() -> Result<()> {
-//     carbonado::utils::init_logging(RUST_LOG);
+#[tokio::test]
+// #[should_panic]
+async fn file_read() -> Result<()> {
+    carbonado::utils::init_logging(RUST_LOG);
 
-//     let (_sk, pk) = generate_keypair(&mut thread_rng());
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-//     info!("Reading file bytes");
-//     let file_bytes = fs::read("tests/samples/cat.gif")?;
-//     debug!("{} bytes read", file_bytes.len());
+    info!("Write Delete:: Reading file bytes");
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-//     info!("Writing file");
-//     let blake3_hash = write_file(Secp256k1PubKey(pk), &file_bytes).await?;
-//     debug!("File hash: {blake3_hash}");
+    // write file returns a filehash
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
-// info!("Reading file by hash");
-// let new_file_bytes = read_file(&blake3_hash).await?;
-// debug!("{} new bytes read", new_file_bytes.len());
+    let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
+    debug!(">>> READ FILE REURNS:: bytes read :: {:?}", new_file_bytes);
 
-// assert_eq!(
-//     file_bytes, new_file_bytes,
-//     "Written and read file matches bytes"
-// );
-
-//     // info!("File write/read test finished successfully!");
-
-//     Ok(())
-// }
+    Ok(())
+}
 
 #[tokio::test]
 // #[should_panic]
@@ -53,13 +45,6 @@ async fn check_catalog_exists() -> Result<()> {
     // info!("Write Delete:: Writing file if not exists in order to test delete");
     // write file returns a filehash
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
-
-    // if blake3_hash {
-    //     info!(
-    //         "Write File in order to Test Delete File as blake3_hash:: {} ",
-    //         blake3_hash.to_string()
-    //     );
-    // }
 
     info!("Reading file by hash");
     let new_file_bytes = read_catalog(&blake3_hash)?;
@@ -98,27 +83,34 @@ async fn check_catalog_exists() -> Result<()> {
 async fn get_slice() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
+    let index_start = 65536;
+    let slice_len = 8192;
+
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-    info!("Reading file bytes");
+    info!("Write Delete:: Reading file bytes");
     let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("{} bytes read", file_bytes.len());
+    debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-    // Write file to get hash in order to read catalog
+    // info!("Write Delete:: Writing file if not exists in order to test delete");
+    // write file returns a filehash
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
-    debug!("FROM WRITE FILE: BLACK3HASH: {}", blake3_hash);
 
-    info!("Reading file by hash");
-    let read_new_file_bytes = read_catalog(&blake3_hash)?;
+    // READ FILE CALL READ CATALOG, IS WHICH DOES THE ENCODING
+    let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
     debug!(
-        "FROM CATALOG :: {} new bytes read",
-        read_new_file_bytes.len()
+        ">>> READ FILE RETURNS:: bytes read :: {:?}",
+        read_file_bytes
     );
 
-    let slice_start: u64 = 65536;
-    let slice_len: u64 = 8192;
+    // expected struct `bao::Hash`, found struct `structs::Secp256k1PubKey`
+    // how to get a boa hash?
+    let bao_hashes = file_bytes // or bytes ??
+        .chunks_exact(bao::HASH_SIZE)
+        .map(BaoHash::try_from)
+        .collect::<Result<Vec<&bao::Hash>>>()?;
 
-    let read_the_slice = read_slices(&Secp256k1PubKey(pk), &blake3_hash, slice_start, slice_len)
+    let read_the_slice = read_slices(bao_hashes, &read_file_bytes, index_start, slice_len)
         .await
         .is_ok();
 

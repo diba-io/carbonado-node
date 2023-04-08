@@ -316,62 +316,17 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
     Ok(bao_hashes)
 }
 
-// pub fn read_slice(file_hash: &Blake3Hash, _start_index: String) -> Result<()> {
-//     trace!(
-//         "_start_index slice at {} ",
-//         _start_index,
-//         // s_end_index
-//     );
-//     let path = SYS_CFG
-//         .volumes
-//         .get(0)
-//         .expect("First volume present")
-//         .path
-//         .join(CATALOG_DIR)
-//         .join(file_hash.to_string());
-
-//     trace!("Read CATALOG slice at {}", path.to_string_lossy());
-//     let mut file = OpenOptions::new().read(true).open(path)?;
-
-//     Ok(())
-// }
-
 pub async fn read_slices(
-    pk: &Secp256k1PubKey,
-    blake3_hash: &Blake3Hash,
-    slice_start: u64, //let slice_start = 65536;
-    slice_len: u64,   // let slice_len = 8192;
+    bao_hash: &bao::Hash, //expected reference `&bao::Hash`
+    blake3_hash: &[u8],
+    slice_start: u16, //let slice_start = 65536;
+    slice_len: u16,   // let slice_len = 8192;
 ) -> Result<()> {
-    //debug!("Read file by hash: {}", blake3_hash.to_string());
+    let hash = bao_hash;
+    let input = blake3_hash;
+    //expected reference `&bao::Hash`
 
-    for vol in &SYS_CFG.volumes {
-        //let cat_path = &vol.path.join(CATALOG_DIR).join(file_hash.to_string());
-        let cat = &vol.path.join(CATALOG_DIR);
-        //remove_dir_catalogs(cat.to_path_buf(), cat_path.to_path_buf()).unwrap();
-        trace!("Search Catalog Content for  File at {:?}", cat);
-    }
-
-    trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
-    let catalog_file_as_input = read_catalog(blake3_hash)?;
-    // let input = catalog_file_as_input;
-    // DEFINE INPUT IN PLACE OF
-    let input = vec![0; 1_000_000];
-
-    // let (encoded, hash) = bao::encode::encode(&input);
-    let (encoded, hash) = bao::encode::encode(input);
-    // These parameters are multiples of the chunk size, which avoids unnecessary overhead.
-    // let slice_start = 65536;
-    // let slice_len = 8192;
-    let encoded_cursor = std::io::Cursor::new(&encoded);
-    let mut extractor = bao::encode::SliceExtractor::new(encoded_cursor, slice_start, slice_len);
-    let mut slice = Vec::new();
-    extractor.read_to_end(&mut slice)?;
-
-    trace!(">>>> <<<< slice_len {:?}", slice_len);
-
-    // The slice includes some overhead to store the necessary subtree hashes.
-
-    //assert_eq!(16776, slice.len());
+    carbonado::verify_slice(hash, input, slice_start, slice_len)?;
 
     Ok(())
 }
