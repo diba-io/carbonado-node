@@ -1,6 +1,7 @@
 use std::fs;
 
 use anyhow::Result;
+use carbonado::structs::Encoded;
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
     structs::{BaoHash, Secp256k1PubKey},
@@ -105,10 +106,12 @@ async fn get_slice() -> Result<()> {
 
     // expected struct `bao::Hash`, found struct `structs::Secp256k1PubKey`
     // how to get a boa hash?
-    let bao_hashes = file_bytes // or bytes ??
-        .chunks_exact(bao::HASH_SIZE)
-        .map(BaoHash::try_from)
-        .collect::<Result<Vec<&bao::Hash>>>()?;
+    // let bao_hashes = file_bytes // or bytes ??
+    //     .chunks_exact(bao::HASH_SIZE)
+    //     .map(BaoHash::try_from)
+    //     .collect::<Result<Vec<&bao::Hash>>>()?;
+
+    let Encoded(encoded_bytes, bao_hash, encode_info) = read_file_bytes;
 
     let read_the_slice = read_slices(bao_hashes, &read_file_bytes, index_start, slice_len)
         .await
