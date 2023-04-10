@@ -276,15 +276,12 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
 
 pub async fn read_slices(
     hash: &bao::Hash, //expected reference `&bao::Hash` from Blake3
-    my_input: &[u8],
+    slice: &[u8],
     slice_start: u64, //let slice_start = 65536;
     slice_len: u16,   // let slice_len = 8192;
 ) -> Result<()> {
-    //let hash = bao_hash as &bao::Hash;
-    let input = my_input;
-    //expected reference `&bao::Hash`
     // requires a Blake3 Hash not a struct Hash
-    carbonado::verify_slice(hash, input, slice_start.try_into().unwrap(), slice_len)?;
+    carbonado::verify_slice(hash, slice, slice_start.try_into().unwrap(), slice_len)?;
 
     Ok(())
 }

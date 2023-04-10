@@ -101,12 +101,10 @@ async fn get_slice() -> Result<()> {
     let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
     debug!(">>> FILE LENGTH :: {:?}", read_file_bytes.len());
 
-    let one = read_file_bytes[0];
-
-    debug!(">>> FILE SLICE:: u8 :: {:?}", one);
-
-    let hash = decode_bao_hash(&read_file_bytes)?;
-    debug!(">>> FILE SLICE:: u8 :: {:?}", hash);
+    //
+    let hash = carbonado::utils::decode_bao_hash(&read_file_bytes)?;
+    //let hash = decode_bao_hash(&read_file_bytes)?;
+    debug!(">>> FILE SLICE Hash::: u8 :: {:?}", hash);
 
     let read_the_slice = read_slices(&hash, &read_file_bytes, index_start, slice_len)
         .await
@@ -159,3 +157,24 @@ async fn read_write_delete_file() -> Result<()> {
 
     Ok(())
 }
+
+//let one = read_file_bytes[1];
+// debug!(">>> FILE SLICE:: u8 one:: {:?}", one);
+// let five_hundred = read_file_bytes[500];
+// debug!(">>> FILE SLICE:: u8  five_hundred:: {:?}", five_hundred);
+// let five_thousand = read_file_bytes[5000];
+// debug!(">>> FILE SLICE:: u8  five_thousand:: {:?}", five_thousand);
+// let fifty_thousand = read_file_bytes[50000];
+// debug!(">>> FILE SLICE:: u8  fifty_thousand:: {:?}", fifty_thousand);
+// let five_hundred_thousand = read_file_bytes[500000];
+// debug!(
+//     ">>> FILE SLICE:: u8  five_hundred_thousand:: {:?}",
+//     five_hundred_thousand
+// );
+// let four_mil_five_hundred_thousand = read_file_bytes[4500000];
+// debug!(
+//     ">>> FILE SLICE:: u8  four_mil_five_hundred_thousand:: {:?}",
+//     four_mil_five_hundred_thousand
+// );
+// let total = read_file_bytes[6170874];
+// debug!(">>> FILE SLICE:: u8  6170875:: {:?}", total);
