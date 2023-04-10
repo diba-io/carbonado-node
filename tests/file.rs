@@ -1,10 +1,10 @@
 use std::fs;
 
 use anyhow::Result;
-use carbonado::structs::Encoded;
+use carbonado::utils::decode_bao_hash;
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
-    structs::{BaoHash, Secp256k1PubKey},
+    structs::Secp256k1PubKey,
 };
 use log::{debug, info};
 use rand::thread_rng;
@@ -84,7 +84,7 @@ async fn check_catalog_exists() -> Result<()> {
 async fn get_slice() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
-    let index_start = 65536;
+    let index_start: u64 = 65536;
     let slice_len = 8192;
 
     let (_sk, pk) = generate_keypair(&mut thread_rng());
@@ -97,23 +97,18 @@ async fn get_slice() -> Result<()> {
     // write file returns a filehash
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
-    // READ FILE CALL READ CATALOG, IS WHICH DOES THE ENCODING
+    // READ FILE CALLs READ CATALOG, IS WHICH DOES THE ENCODING
     let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(
-        ">>> READ FILE RETURNS:: bytes read :: {:?}",
-        read_file_bytes
-    );
+    debug!(">>> FILE LENGTH :: {:?}", read_file_bytes.len());
 
-    // expected struct `bao::Hash`, found struct `structs::Secp256k1PubKey`
-    // how to get a boa hash?
-    // let bao_hashes = file_bytes // or bytes ??
-    //     .chunks_exact(bao::HASH_SIZE)
-    //     .map(BaoHash::try_from)
-    //     .collect::<Result<Vec<&bao::Hash>>>()?;
+    let one = read_file_bytes[0];
 
-    let Encoded(encoded_bytes, bao_hash, encode_info) = read_file_bytes;
+    debug!(">>> FILE SLICE:: u8 :: {:?}", one);
 
-    let read_the_slice = read_slices(bao_hashes, &read_file_bytes, index_start, slice_len)
+    let hash = decode_bao_hash(&read_file_bytes)?;
+    debug!(">>> FILE SLICE:: u8 :: {:?}", hash);
+
+    let read_the_slice = read_slices(&hash, &read_file_bytes, index_start, slice_len)
         .await
         .is_ok();
 

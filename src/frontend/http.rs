@@ -1,18 +1,16 @@
-use std::{net::SocketAddr, slice::SliceIndex, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 //use axum::extract::FromRequestParts;
 use axum::{
-    async_trait,
     body::Bytes,
     extract::Path,
-    extract::{Extension, FromRequestParts, Query, RawPathParams, State},
-    http::{request::Parts, StatusCode},
+    extract::Query,
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Router,
 };
-use axum_macros::FromRequestParts;
 use log::{debug, info};
 
 use serde::Deserialize;

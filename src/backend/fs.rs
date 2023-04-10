@@ -2,7 +2,7 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Cursor, Read, Write},
+    io::{self, Read, Write},
     //path::Path,
     path::{Path, PathBuf},
 };
@@ -111,50 +111,8 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
 
         debug!("Finished write_file");
         /* WARNING THIS CASUES ALL CODE THERE AFTER TO NOT BE CALLED */
-        return Ok(file_hash);
+        Ok(file_hash)
     }
-
-    // trace!("Split each segment out into 8 separate chunks and write each chunk to the storage volume by filename");
-    // let segment_hashes = encoded_segments
-    //     .par_iter()
-    //     .map(|encoded_segment| {
-    //         let Encoded(encoded_bytes, bao_hash, encode_info) = encoded_segment;
-    //         trace!("Encoded bytes len: {}", encoded_bytes.len());
-
-    //         let encoded_chunk_size = encode_info.bytes_verifiable as usize / FEC_M;
-    //         trace!("Encoded chunk size: {}", encoded_chunk_size);
-
-    //         encoded_bytes
-    //             .par_chunks_exact(encoded_chunk_size)
-    //             .enumerate()
-    //             .map(|(chunk_index, encoded_segment_chunk)| {
-    //                 let volume = SYS_CFG
-    //                     .volumes
-    //                     .get(chunk_index)
-    //                     .expect("Get one of eight volumes");
-
-    //                 write_segment(
-    //                     &ss.secret_bytes(),
-    //                     volume.path.join(SEGMENT_DIR),
-    //                     bao_hash.as_bytes(),
-    //                     NODE_FORMAT,
-    //                     encoded_segment_chunk,
-    //                     chunk_index,
-    //                     encode_info.output_len,
-    //                     encode_info.padding_len,
-    //                 )
-    //             })
-    //             .collect::<Result<Vec<()>>>()?;
-
-    //         Ok(BaoHash(bao_hash.to_owned()))
-    //     })
-    //     .collect::<Result<Vec<BaoHash>>>()?;
-
-    // trace!("Append each hash to its catalog, plus its format");
-    // write_catalog(&file_hash, &segment_hashes)?;
-
-    // debug!("Finished write_file");
-    // Ok(file_hash)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -317,16 +275,16 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
 }
 
 pub async fn read_slices(
-    bao_hash: &bao::Hash, //expected reference `&bao::Hash`
-    blake3_hash: &[u8],
-    slice_start: u16, //let slice_start = 65536;
+    hash: &bao::Hash, //expected reference `&bao::Hash` from Blake3
+    my_input: &[u8],
+    slice_start: u64, //let slice_start = 65536;
     slice_len: u16,   // let slice_len = 8192;
 ) -> Result<()> {
-    let hash = bao_hash;
-    let input = blake3_hash;
+    //let hash = bao_hash as &bao::Hash;
+    let input = my_input;
     //expected reference `&bao::Hash`
-
-    carbonado::verify_slice(hash, input, slice_start, slice_len)?;
+    // requires a Blake3 Hash not a struct Hash
+    carbonado::verify_slice(hash, input, slice_start.try_into().unwrap(), slice_len)?;
 
     Ok(())
 }
