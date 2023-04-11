@@ -1,7 +1,7 @@
 use std::fs;
 
 use anyhow::Result;
-use carbonado::utils::decode_bao_hash;
+use carbonado::{structs::Encoded, utils::decode_bao_hash};
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
     structs::Secp256k1PubKey,
@@ -100,6 +100,9 @@ async fn get_slice() -> Result<()> {
     // READ FILE CALLs READ CATALOG, IS WHICH DOES THE ENCODING
     let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
     debug!(">>> FILE LENGTH :: {:?}", read_file_bytes.len());
+
+    // let Encoded(encoded_bytes, bao_hash, encode_info) = read_file_bytes;
+    // let (a, b, c) = Encoded;
 
     //
     let hash = carbonado::utils::decode_bao_hash(&read_file_bytes)?;
