@@ -64,7 +64,7 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
 
     trace!("Get eight storage volumes from config");
     if SYS_CFG.volumes.len() != FEC_M {
-        return Err(anyhow!("Eight volume paths must be configured"));
+        Err(anyhow!("Eight volume paths must be configured"))
     } else {
         trace!("Create a shared secret using ECDH");
         let sk = SYS_CFG.private_key;
