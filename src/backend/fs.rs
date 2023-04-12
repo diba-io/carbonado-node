@@ -285,7 +285,7 @@ pub async fn read_slices(
     // Start by encoding some input.
     let (encoded_input, hash) = bao::encode::encode(file_bytes);
     debug!(">>> encoded INPUT LENGTH:: {:?}", &encoded_input.len());
-    debug!(">>> FS hash hash:: {:?}", &hash);
+    debug!(">>> fs hash hash:: {:?}", &hash);
 
     // Slice the encoding. These parameters are multiples of the chunk size, which avoids
     // unnecessary overhead.
