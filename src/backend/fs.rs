@@ -8,7 +8,6 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use bao::decode::SliceDecoder;
 use carbonado::{
     constants::{Format, FEC_M},
     fs::Header,

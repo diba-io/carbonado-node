@@ -17,7 +17,7 @@ use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, read_slices, write_file},
+    backend::fs::{delete_file, read_file, write_file},
     prelude::*,
 };
 
