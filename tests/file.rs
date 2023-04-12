@@ -29,7 +29,10 @@ async fn file_read() -> Result<()> {
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
     let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(">>> READ FILE REURNS:: bytes read :: {:?}", new_file_bytes);
+    debug!(
+        ">>> READ FILE REURNS:: bytes read :: {:?}",
+        new_file_bytes.len()
+    );
 
     Ok(())
 }
@@ -54,7 +57,7 @@ async fn check_catalog_exists() -> Result<()> {
     debug!("{} new bytes read", new_file_bytes.len());
 
     let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
-    debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+    debug!("deleted files:: {:?}", new_file_bytes);
 
     debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
     info!("Write/Delete test finished successfully!");
