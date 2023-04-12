@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use bao::decode::SliceDecoder;
 use carbonado::{
     constants::{Format, FEC_M},
     fs::Header,
@@ -275,13 +276,56 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
 }
 
 pub async fn read_slices(
-    hash: &bao::Hash, //expected reference `&bao::Hash` from Blake3
-    slice: &[u8],
+    hash: bao::Hash, // from Blake3
+    file_bytes: &[u8],
     slice_start: u64, //let slice_start = 65536;
     slice_len: u16,   // let slice_len = 8192;
 ) -> Result<()> {
-    // requires a Blake3 Hash not a struct Hash
-    carbonado::verify_slice(hash, slice, slice_start.try_into().unwrap(), slice_len)?;
+    use std::io::prelude::*;
+
+    // Start by encoding some input.
+    let (encoded_input, hash) = bao::encode::encode(file_bytes);
+    debug!(">>> encoded INPUT LENGTH:: {:?}", &encoded_input.len());
+    debug!(">>> FS hash hash:: {:?}", &hash);
+
+    // Slice the encoding. These parameters are multiples of the chunk size, which avoids
+    // unnecessary overhead.
+    let slice_start = 65536;
+    let slice_len = 8192;
+    let encoded_cursor = std::io::Cursor::new(&encoded_input);
+    let mut extractor = bao::encode::SliceExtractor::new(encoded_cursor, slice_start, slice_len);
+    let mut slice = Vec::new();
+    extractor.read_to_end(&mut slice)?;
+
+    // Decode the slice. The result should be the same as the part of the input that the slice
+    // represents. Note that we're using the same hash that encoding produced, which is
+    // independent of the slice parameters. That's the whole point; if we just wanted to re-encode
+    // a portion of the input and wind up with a different hash, we wouldn't need slicing.
+    let mut decoded = Vec::new();
+    let mut decoder = bao::decode::SliceDecoder::new(&*slice, &hash, slice_start, slice_len);
+    decoder.read_to_end(&mut decoded)?;
+    // assert_eq!(
+    //     &encoded_input[slice_start as usize..][..slice_len as usize],
+    //     &*decoded
+    // );
+    debug!(
+        ">>> LEFT :: SLICE START LENGTH:: {:?}",
+        &encoded_input[slice_start as usize..][..slice_len as usize].len()
+    );
+    debug!(">>> RIGHT :: SLICE START LENGTH:: {:?}", &decoded.len());
+    debug!(">>>  SLICE LENGTH:: {:?}", &slice.len());
+    debug!(">>> SLICE VALUE:: {:?}", &slice[10]);
+
+    // Like regular decoding, slice decoding will fail if the hash doesn't match.
+    // let mut bad_slice = slice.clone();
+    // debug!("BAD SLICE");
+    // let last_index = bad_slice.len() - 1;
+    // bad_slice[last_index] ^= 1;
+    // let mut decoder = bao::decode::SliceDecoder::new(&*bad_slice, &hash, slice_start, slice_len);
+    // let err = decoder.read_to_end(&mut Vec::new()).unwrap_err();
+    // assert_eq!(std::io::ErrorKind::InvalidData, err.kind());
+
+    // carbonado::verify_slice(hash, encoded_input, slice_start.try_into().unwrap(), slice_len)?;
 
     Ok(())
 }

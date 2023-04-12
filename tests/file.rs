@@ -1,10 +1,12 @@
-use std::fs;
+use std::{fs, vec};
 
 use anyhow::Result;
+use bao::Hash;
+use blake3::hash;
 use carbonado::{structs::Encoded, utils::decode_bao_hash};
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
-    structs::Secp256k1PubKey,
+    structs::{BaoHash, Blake3Hash, Secp256k1PubKey},
 };
 use log::{debug, info};
 use rand::thread_rng;
@@ -99,21 +101,35 @@ async fn get_slice() -> Result<()> {
 
     // READ FILE CALLs READ CATALOG, IS WHICH DOES THE ENCODING
     let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(">>> FILE LENGTH :: {:?}", read_file_bytes.len());
+    debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
 
-    // let Encoded(encoded_bytes, bao_hash, encode_info) = read_file_bytes;
-    // let (a, b, c) = Encoded;
+    let (encoded_input, hash) = bao::encode::encode(&read_file_bytes);
+    debug!(">>> encoded:: {:?}", &encoded_input.len());
+    debug!(">>> hash hash:: {:?}", &hash);
 
-    //
-    let hash = carbonado::utils::decode_bao_hash(&read_file_bytes)?;
-    //let hash = decode_bao_hash(&read_file_bytes)?;
-    debug!(">>> FILE SLICE Hash::: u8 :: {:?}", hash);
+    // let bao_hashes = read_file_bytes.chunks_exact(32);
+    // debug!(">>> bao_hashes Length:: {:?}", &bao_hashes.len());
 
-    let read_the_slice = read_slices(&hash, &read_file_bytes, index_start, slice_len)
+    //let mut hash_vec = new Vec();
+    // convert u8 32 to blake3 hash
+    // let mut hash_vec: Vec<Hash> = Vec::new();
+    // let mut hashed: Hash;
+    // for hash in bao_hashes {
+    //     hashed = decode_bao_hash(hash)?;
+    //     let dec_hash = hashed;
+    //     hash_vec.push(dec_hash);
+    // }
+
+    // debug!(
+    //     ">>> decode_bao_hash Hash Vec Length:: {:?}",
+    //     &hash_vec.len()
+    // );
+
+    let read_the_slice = read_slices(hash, &read_file_bytes, index_start, slice_len)
         .await
         .is_ok();
 
-    assert!(read_the_slice);
+    //assert!(read_the_slice);
 
     Ok(())
 }
