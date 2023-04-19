@@ -27,6 +27,7 @@ async fn file_read() -> Result<()> {
 
     // write file returns a filehash
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    debug!(">>> WRITE FILE REURNS:: hash :: {}", blake3_hash);
 
     let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
     debug!(
