@@ -279,7 +279,7 @@ pub async fn read_slices(
     file_bytes: &[u8],
     slice_start: u64, //let slice_start = 65536;
     slice_len: u16,   // let slice_len = 8192;
-) -> Result<()> {
+) -> Result<Vec<u8>> {
     use std::io::prelude::*;
 
     // Start by encoding some input.
@@ -315,6 +315,8 @@ pub async fn read_slices(
     debug!(">>>  SLICE LENGTH:: {:?}", &slice.len());
     debug!(">>> SLICE VALUE:: {:?}", &slice[10]);
 
+    //debug!(">>> SLICE DECODED VALUE:: {:?}", &decoded);
+
     // Like regular decoding, slice decoding will fail if the hash doesn't match.
     // let mut bad_slice = slice.clone();
     // debug!("BAD SLICE");
@@ -326,7 +328,7 @@ pub async fn read_slices(
 
     // carbonado::verify_slice(hash, encoded_input, slice_start.try_into().unwrap(), slice_len)?;
 
-    Ok(())
+    Ok(decoded)
 }
 
 pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {

@@ -24,14 +24,6 @@ use crate::{
 
 static LOCK: std::sync::RwLock<std::string::String> = RwLock::new(String::new());
 
-//#[derive(Deserialize, std::fmt::Debug)]
-
-// can use Options Here.
-// struct File {
-//     pk: String,
-//     black3_hash: String,
-// }
-
 #[derive(Deserialize, std::fmt::Debug)]
 
 // can use Options Here.
@@ -39,7 +31,7 @@ struct FileSlice {
     pk: String,
     black3_hash: String,
     index_start: u64,
-    range_end: u64,
+    range_end: u16,
 }
 
 async fn post_file<'a>(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
@@ -55,10 +47,10 @@ async fn post_file<'a>(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoR
 
 #[axum_macros::debug_handler]
 async fn get_last_hash(Path(_pk): Path<String>) -> Result<impl IntoResponse, AppError> {
+    // add verification
     //let _pk = Secp256k1PubKey::try_from(pk.as_str())?;
 
     let hash1 = LOCK.read().unwrap();
-    //debug!("#### RwLock last_HASH {:?}", *hash1);
     let string_hash1 = hash1.clone();
 
     Ok((StatusCode::OK, string_hash1))
@@ -68,18 +60,32 @@ async fn get_last_hash(Path(_pk): Path<String>) -> Result<impl IntoResponse, App
 async fn get_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    debug!(">>> GET GET FILE pk:: {}", pk);
+    //035daafa302424d1bd492a38b280225bb3cc6db1082220d581d5d24fb2e2e71ebc
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
+
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
     let _file_bytes = read_file(&pk, &blake3_hash).await?;
     debug!("#### HTTP TEST WHAT IS FILE my_HASH {:?}", _file_bytes);
     Ok((StatusCode::OK, _file_bytes))
 }
 
+#[axum_macros::debug_handler]
 async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
+    //35daafa302424d1bd492a38b280225bb3cc6db1082220d581d5d24fb2e2e71ebc
+    debug!(">>> my_params pk:: {}", my_params.pk);
+    debug!(">>> my_params hash:: {}", my_params.black3_hash);
+    debug!(">>> my_params index_start:: {}", my_params.index_start);
+    debug!(">>> my_params range_end:: {}", my_params.range_end);
+
+    let true_form_key = "0".to_owned() + &my_params.pk;
+    debug!(">>> my_params pk:: {}", true_form_key);
+    //debug!(">>> my_params file_bytes:: {:?}", my_params.file_bytes);
     // have to call read_file() to provide the bytes to slice from
-    let pk = Secp256k1PubKey::try_from(my_params.pk.as_str())?;
+    let pk = Secp256k1PubKey::try_from(true_form_key.as_str())?;
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&my_params.black3_hash)?);
     let file_bytes = read_file(&pk, &blake3_hash).await?;
+    debug!(">>> my_params file_bytes:: {:?}", &file_bytes);
 
     // use the file_bytes to encode input and hash
     let (encoded_input, hash) = bao::encode::encode(&file_bytes);
@@ -91,14 +97,13 @@ async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, App
         hash,
         &file_bytes,
         my_params.index_start,
-        my_params.range_end as u16,
+        my_params.range_end,
     )
-    .await
-    .is_ok();
+    .await?;
 
     debug!(">>> hash hash:: {:?}", &read_the_slice);
 
-    Ok((StatusCode::OK, "read_the_slice"))
+    Ok((StatusCode::OK, read_the_slice))
 }
 
 #[axum_macros::debug_handler]

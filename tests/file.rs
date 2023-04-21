@@ -129,9 +129,9 @@ async fn get_slice() -> Result<()> {
     //     &hash_vec.len()
     // );
 
-    let read_the_slice = read_slices(hash, &read_file_bytes, index_start, slice_len)
-        .await
-        .is_ok();
+    let read_the_slice = read_slices(hash, &read_file_bytes, index_start, slice_len).await?;
+
+    debug!(">>> decode_bao_hash Hash Vec Length:: {:?}", read_the_slice);
 
     //assert!(read_the_slice);
 
