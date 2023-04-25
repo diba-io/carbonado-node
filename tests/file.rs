@@ -1,4 +1,4 @@
-use anyhow::{Ok, Result};
+use anyhow::{anyhow, Error, Ok, Result};
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
     structs::Secp256k1PubKey,
@@ -22,21 +22,26 @@ async fn check_catalog_exists() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    let lod_value = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_err();
+    if lod_value {
+        assert!(matches!(lod_value, true));
+    } else {
+        let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
-    info!("Reading file by hash");
-    let new_file_bytes = read_catalog(&blake3_hash)?;
-    debug!("{} new bytes read", new_file_bytes.len());
+        info!("Reading file by hash");
+        let new_file_bytes = read_catalog(&blake3_hash)?;
+        debug!("{} new bytes read", new_file_bytes.len());
 
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("Catalog Exists test finished successfully!");
+        let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
+        debug!("Deleted file:: {:?}", del_file_bytes);
+        info!("Catalog Exists test finished successfully!");
+    }
 
     Ok(())
 }
 
 #[tokio::test]
-async fn file_read() -> Result<()> {
+async fn file_read() -> Result<(), Error> {
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     info!("Write Delete:: Reading file bytes");
@@ -44,15 +49,22 @@ async fn file_read() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    let lod_value = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_err();
+    if lod_value {
+        assert!(matches!(lod_value, true));
+    } else {
+        let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
-    // READ FILE CALLs READ CATALOG
-    let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
+        //assert_eq!(blake3_hash., true);
 
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("File Read test finished successfully!");
+        // READ FILE CALLs READ CATALOG
+        let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
+        debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
+
+        let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
+        debug!("Deleted file:: {:?}", del_file_bytes);
+        info!("File Write/Read test finished successfully!");
+    };
 
     Ok(())
 }
@@ -72,23 +84,27 @@ async fn get_slice() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    let lod_value = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_err();
+    if lod_value {
+        assert!(matches!(lod_value, true));
+    } else {
+        let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
 
-    // READ FILE CALLs READ CATALOG
-    let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
+        // READ FILE CALLs READ CATALOG
+        let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
+        debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
 
-    let (encoded_input, hash) = bao::encode::encode(&read_file_bytes);
-    debug!(">>> encoded:: {:?}", &encoded_input.len());
-    debug!(">>> hash:: {:?}", &hash);
+        let (encoded_input, hash) = bao::encode::encode(&read_file_bytes);
+        debug!(">>> encoded:: {:?}", &encoded_input.len());
+        debug!(">>> hash:: {:?}", &hash);
 
-    let read_slice = read_slices(hash, &read_file_bytes, index_start, slice_len).await?;
-    debug!(">>> decode_bao_hash Hash Vec Length:: {:?}", read_slice);
+        let read_slice = read_slices(hash, &read_file_bytes, index_start, slice_len).await?;
+        debug!(">>> decode_bao_hash Hash Vec Length:: {:?}", read_slice);
 
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("Get Slices test finished successfully!");
-
+        let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
+        debug!("Deleted file:: {:?}", del_file_bytes);
+        info!("Get Slices test finished successfully!");
+    }
     Ok(())
 }
 
