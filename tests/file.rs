@@ -11,33 +11,6 @@ use std::fs;
 const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 
 #[tokio::test]
-async fn file_read() -> Result<()> {
-    carbonado::utils::init_logging(RUST_LOG);
-
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    info!("Write Delete:: Reading file bytes");
-    let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("{} Write Delete:: bytes read", file_bytes.len());
-
-    // write file returns a filehash
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
-    debug!(">>> WRITE FILE REURNS:: hash :: {}", blake3_hash);
-
-    let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(
-        ">>> READ FILE RETURNS:: bytes read :: {:?}",
-        new_file_bytes.len()
-    );
-
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("File Write/Read test finished successfully!");
-
-    Ok(())
-}
-
-#[tokio::test]
 // #[should_panic]
 async fn check_catalog_exists() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
@@ -58,6 +31,28 @@ async fn check_catalog_exists() -> Result<()> {
     let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
     debug!("Deleted file:: {:?}", del_file_bytes);
     info!("Catalog Exists test finished successfully!");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn file_read() -> Result<()> {
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+
+    info!("Write Delete:: Reading file bytes");
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    debug!("{} Write Delete:: bytes read", file_bytes.len());
+
+    // info!("Write Delete:: Writing file if not exists in order to test delete");
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+
+    // READ FILE CALLs READ CATALOG
+    let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
+    debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
+
+    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
+    debug!("Deleted file:: {:?}", del_file_bytes);
+    info!("File Write/Read test finished successfully!");
 
     Ok(())
 }

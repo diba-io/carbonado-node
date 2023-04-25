@@ -308,14 +308,9 @@ pub async fn read_slices(
     //     &*decoded
     // );
     debug!(
-        ">>> LEFT :: SLICE START LENGTH:: {:?}",
+        "usize vs length: {:?}",
         &encoded_input[slice_start as usize..][..slice_len as usize].len()
     );
-    debug!(">>> RIGHT :: SLICE START LENGTH:: {:?}", &decoded.len());
-    debug!(">>>  SLICE LENGTH:: {:?}", &slice.len());
-    debug!(">>> SLICE VALUE:: {:?}", &slice[10]);
-
-    //debug!(">>> SLICE DECODED VALUE:: {:?}", &decoded);
 
     // Like regular decoding, slice decoding will fail if the hash doesn't match.
     let mut bad_slice = slice.clone();
@@ -351,7 +346,6 @@ pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
 }
 
 fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
-    trace!(">>> remove_Segment_contents");
     for entry in fs::read_dir(path)? {
         trace!("Delete Segment File at {:?}", entry);
         fs::remove_file(entry?.path())?;
@@ -361,7 +355,7 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result
 
 fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     for entry in fs::read_dir(path)? {
-        trace!("Delete CATALOG File at {:?}", entry);
+        trace!("Delete Catalog File at {:?}", entry);
         fs::remove_file(entry?.path())?;
     }
     Ok(())
