@@ -52,7 +52,7 @@ async fn file_read() -> Result<()> {
 
     let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
     debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("File Write/Read test finished successfully!");
+    info!("File Read test finished successfully!");
 
     Ok(())
 }
