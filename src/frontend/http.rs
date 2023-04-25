@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::borrow::Borrow;
+use std::fs::{self};
 use std::sync::RwLock;
 use std::{net::SocketAddr, str::FromStr};
 //use axum::extract::FromRequestParts;
@@ -14,13 +14,11 @@ use axum::{
 };
 use log::{debug, info};
 
-use serde::Deserialize;
-use tower_http::cors::CorsLayer;
-
 use crate::{
     backend::fs::{delete_file, read_file, read_slices, write_file},
     prelude::*,
 };
+use serde::Deserialize;
 
 static LOCK: std::sync::RwLock<std::string::String> = RwLock::new(String::new());
 
@@ -37,7 +35,8 @@ struct FileSlice {
 async fn post_file<'a>(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
     let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
     let hash = write_file(_pk, &body).await?;
-    debug!("#### HTTP WHAT IS FILE HASH {}", hash.borrow());
+
+    // store hash into lock to get a response body for carbonado client
     let hash_to_string = hash.to_string();
     let mut w = LOCK.write().unwrap();
     *w = hash_to_string;
@@ -47,9 +46,6 @@ async fn post_file<'a>(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoR
 
 #[axum_macros::debug_handler]
 async fn get_last_hash(Path(_pk): Path<String>) -> Result<impl IntoResponse, AppError> {
-    // add verification
-    //let _pk = Secp256k1PubKey::try_from(pk.as_str())?;
-
     let hash1 = LOCK.read().unwrap();
     let string_hash1 = hash1.clone();
 
@@ -61,31 +57,28 @@ async fn get_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
     debug!(">>> GET GET FILE pk:: {}", pk);
-    //035daafa302424d1bd492a38b280225bb3cc6db1082220d581d5d24fb2e2e71ebc
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
 
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
     let _file_bytes = read_file(&pk, &blake3_hash).await?;
-    debug!("#### HTTP TEST WHAT IS FILE my_HASH {:?}", _file_bytes);
+
+    debug!(">>> GET GET FILE WHAT FORMAT>>>>  {:?}", _file_bytes);
+
+    let hash1 = LOCK.read().unwrap();
+    let string_hash2 = hash1.clone();
+
+    let path = "file/".to_owned() + &string_hash2 + ".txt";
+    fs::write(path, _file_bytes.clone())?;
+
     Ok((StatusCode::OK, _file_bytes))
 }
 
 #[axum_macros::debug_handler]
 async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
-    //35daafa302424d1bd492a38b280225bb3cc6db1082220d581d5d24fb2e2e71ebc
-    debug!(">>> my_params pk:: {}", my_params.pk);
-    debug!(">>> my_params hash:: {}", my_params.black3_hash);
-    debug!(">>> my_params index_start:: {}", my_params.index_start);
-    debug!(">>> my_params range_end:: {}", my_params.range_end);
-
     let true_form_key = "0".to_owned() + &my_params.pk;
-    debug!(">>> my_params pk:: {}", true_form_key);
-    //debug!(">>> my_params file_bytes:: {:?}", my_params.file_bytes);
-    // have to call read_file() to provide the bytes to slice from
     let pk = Secp256k1PubKey::try_from(true_form_key.as_str())?;
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&my_params.black3_hash)?);
     let file_bytes = read_file(&pk, &blake3_hash).await?;
-    debug!(">>> my_params file_bytes:: {:?}", &file_bytes);
 
     // use the file_bytes to encode input and hash
     let (encoded_input, hash) = bao::encode::encode(&file_bytes);
@@ -100,8 +93,6 @@ async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, App
         my_params.range_end,
     )
     .await?;
-
-    debug!(">>> hash hash:: {:?}", &read_the_slice);
 
     Ok((StatusCode::OK, read_the_slice))
 }
@@ -124,7 +115,6 @@ pub async fn start() -> Result<()> {
         .route("/slice/", get(get_slice))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
-        //.layer(CorsLayer::permissive());
         .layer(
             tower_http::cors::CorsLayer::new()
                 .allow_origin("http://localhost:8080".parse::<HeaderValue>().unwrap())

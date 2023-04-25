@@ -318,15 +318,13 @@ pub async fn read_slices(
     //debug!(">>> SLICE DECODED VALUE:: {:?}", &decoded);
 
     // Like regular decoding, slice decoding will fail if the hash doesn't match.
-    // let mut bad_slice = slice.clone();
-    // debug!("BAD SLICE");
-    // let last_index = bad_slice.len() - 1;
-    // bad_slice[last_index] ^= 1;
-    // let mut decoder = bao::decode::SliceDecoder::new(&*bad_slice, &hash, slice_start, slice_len);
-    // let err = decoder.read_to_end(&mut Vec::new()).unwrap_err();
-    // assert_eq!(std::io::ErrorKind::InvalidData, err.kind());
-
-    // carbonado::verify_slice(hash, encoded_input, slice_start.try_into().unwrap(), slice_len)?;
+    let mut bad_slice = slice.clone();
+    debug!("BAD SLICE");
+    let last_index = bad_slice.len() - 1;
+    bad_slice[last_index] ^= 1;
+    let mut decoder = bao::decode::SliceDecoder::new(&*bad_slice, &hash, slice_start, slice_len);
+    let err = decoder.read_to_end(&mut Vec::new()).unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, err.kind());
 
     Ok(decoded)
 }
@@ -368,33 +366,3 @@ fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     }
     Ok(())
 }
-
-// fn remove_dir_segements<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
-//     trace!(">>> remove_Segment_contents");
-//     for entry in fs::read_dir(path)? {
-//         let entry = entry?;
-//         trace!("ENTRY Delete SEGMENT File at {:?}", entry);
-
-//         match &entry {
-//             seg_file => {
-//                 fs::remove_file(seg_file.path())?;
-//                 trace!("Delete Segment File at {:?}", seg_file);
-//             }
-//         }
-//     }
-//     Ok(())
-// }
-
-// fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
-//     for entry in fs::read_dir(path)? {
-//         let entry = entry?;
-//         trace!("ENTRY Delete CATALOG File at {:?}", entry);
-//         match &entry {
-//             file => {
-//                 fs::remove_file(file.path())?;
-//                 trace!("FILE MATCH Delete CATALOG File at {:?}", file);
-//             }
-//         }
-//     }
-//     Ok(())
-// }
