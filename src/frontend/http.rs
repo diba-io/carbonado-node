@@ -56,19 +56,9 @@ async fn get_last_hash(Path(_pk): Path<String>) -> Result<impl IntoResponse, App
 async fn get_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    debug!(">>> GET GET FILE pk:: {}", pk);
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
     let _file_bytes = read_file(&pk, &blake3_hash).await?;
-
-    debug!(">>> GET GET FILE WHAT FORMAT>>>>  {:?}", _file_bytes);
-
-    let hash1 = LOCK.read().unwrap();
-    let string_hash2 = hash1.clone();
-
-    let path = "file/".to_owned() + &string_hash2 + ".txt";
-    fs::write(path, _file_bytes.clone())?;
 
     Ok((StatusCode::OK, _file_bytes))
 }

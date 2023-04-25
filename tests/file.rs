@@ -1,6 +1,8 @@
 use anyhow::{Ok, Result};
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
+    config::SYS_CFG,
+    prelude::{CATALOG_DIR, SEGMENT_DIR},
     structs::Secp256k1PubKey,
 };
 use log::{debug, info};
@@ -22,13 +24,13 @@ async fn file_read() -> Result<()> {
 
     // write file returns a filehash
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    debug!(">>> WRITE FILE REURNS:: hash :: {}", blake3_hash);
 
-    let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(">>> READ FILE:: bytes read :: {:?}", &read_file_bytes.len());
-
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("File Write/Read test finished successfully!");
+    let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
+    debug!(
+        ">>> READ FILE REURNS:: bytes read :: {:?}",
+        new_file_bytes.len()
+    );
 
     Ok(())
 }
@@ -51,9 +53,11 @@ async fn check_catalog_exists() -> Result<()> {
     let new_file_bytes = read_catalog(&blake3_hash)?;
     debug!("{} new bytes read", new_file_bytes.len());
 
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("Catalog Exists test finished successfully!");
+    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
+    debug!("deleted files:: {:?}", new_file_bytes);
+
+    debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
+    info!("Write/Delete test finished successfully!");
 
     Ok(())
 }
@@ -84,11 +88,8 @@ async fn get_slice() -> Result<()> {
     debug!(">>> hash:: {:?}", &hash);
 
     let read_slice = read_slices(hash, &read_file_bytes, index_start, slice_len).await?;
-    debug!(">>> decode_bao_hash Hash Vec Length:: {:?}", read_slice);
 
-    let del_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
-    debug!("Deleted file:: {:?}", del_file_bytes);
-    info!("Get Slices test finished successfully!");
+    debug!(">>> decode_bao_hash Hash Vec Length:: {:?}", read_slice);
 
     Ok(())
 }
@@ -127,7 +128,7 @@ async fn read_write_delete_file() -> Result<()> {
         );
     }
 
-    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_ok();
+    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
     debug!("Ddeleted file:: {:?}", new_file_bytes);
     info!("Write/Delete test finished successfully!");
 
