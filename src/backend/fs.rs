@@ -33,21 +33,21 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
 
     trace!("TODO: Check if file catalog already exists");
-    let path = SYS_CFG
-        .volumes
-        .get(0)
-        .expect("First volume present")
-        .path
-        .join(CATALOG_DIR)
-        .join(file_hash.to_string());
+    // let path = SYS_CFG
+    //     .volumes
+    //     .get(0)
+    //     .expect("First volume present")
+    //     .path
+    //     .join(CATALOG_DIR)
+    //     .join(file_hash.to_string());
 
-    trace!("Read catalog at {}", &path.to_string_lossy());
+    // trace!("Read catalog at {}", &path.to_string_lossy());
 
-    let is_catalog = std::path::Path::new(&path).file_name();
-    trace!("Catalog File: file_name: {:?}", is_catalog);
-    if is_catalog.is_some() {
-        return Err(anyhow!("This file already exists for this user."));
-    }
+    // let is_catalog = std::path::Path::new(&path).file_name();
+    // trace!("Catalog File: file_name: {:?}", is_catalog);
+    // if is_catalog.is_some() {
+    //     return Err(anyhow!("This file already exists for this user."));
+    // }
 
     trace!("Segment files");
     let segments_iter = file_bytes.par_chunks_exact(SEGMENT_SIZE);
@@ -355,7 +355,7 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result
 
 fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     for entry in fs::read_dir(path)? {
-        trace!("Delete Catalog File at {:?}", entry);
+        trace!("Delete CATALOG File at {:?}", entry);
         fs::remove_file(entry?.path())?;
     }
     Ok(())
