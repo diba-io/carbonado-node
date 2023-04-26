@@ -1,8 +1,6 @@
 use anyhow::{Ok, Result};
 use carbonado_node::{
     backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
-    config::SYS_CFG,
-    prelude::{CATALOG_DIR, SEGMENT_DIR},
     structs::Secp256k1PubKey,
 };
 use log::{debug, info};
@@ -20,15 +18,15 @@ async fn file_read() -> Result<()> {
 
     info!("Write Delete:: Reading file bytes");
     let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("{} Write Delete:: bytes read", file_bytes.len());
+    debug!("FILE READ :: bytes read {}", file_bytes.len());
 
     // write file returns a filehash
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
-    debug!(">>> WRITE FILE REURNS:: hash :: {}", blake3_hash);
+    debug!(">>> WRITE FILE RETURNS:: hash :: {}", blake3_hash);
 
     let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
     debug!(
-        ">>> READ FILE REURNS:: bytes read :: {:?}",
+        ">>> READ FILE RETURNS:: bytes read :: {:?}",
         new_file_bytes.len()
     );
 
