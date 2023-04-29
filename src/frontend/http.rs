@@ -1,9 +1,12 @@
 use anyhow::Result;
+use std::fs;
+use std::io::Read;
 use std::sync::RwLock;
 use std::{net::SocketAddr, str::FromStr};
 //use axum::extract::FromRequestParts;
 use axum::{
     body::Bytes,
+    extract::Multipart,
     extract::Path,
     extract::Query,
     http::{header::CONTENT_TYPE, HeaderValue, Method, StatusCode},
@@ -31,14 +34,34 @@ struct FileSlice {
     range_end: u16,
 }
 
-async fn post_file<'a>(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
-    let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
-    let hash = write_file(_pk, &body).await?;
+async fn post_file<'a>(
+    Path(pk): Path<String>,
+    mut multipart: Multipart,
+) -> Result<impl IntoResponse, AppError> {
+    while let Some(mut field) = multipart.next_field().await.unwrap() {
+        let name = field.name().unwrap().to_string();
+        //let data: Bytes = field.bytes().await.unwrap();
+        let data: Bytes = field.bytes().await.unwrap();
 
-    // store hash into lock to get a response body for carbonado client
-    let hash_to_string = hash.to_string();
-    let mut w = LOCK.write().unwrap();
-    *w = hash_to_string;
+        debug!("Length of `{}` is {} bytes", name, data.len());
+        debug!("DATA of `{}` is {:?} DATA", name, data);
+
+        let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
+
+        let path = "file/".to_owned() + "body_test" + ".png";
+        debug!(">>> file body_test:: {}", path);
+        fs::write(path, &data)?;
+
+        let hash = write_file(_pk, &data).await?;
+
+        // store hash into lock to get a response body for carbonado client
+        let hash_to_string = hash.to_string();
+        let mut w = LOCK.write().unwrap();
+        *w = hash_to_string;
+    }
+
+    // let body = _body;
+    //post_file..Write file into dir file for test
 
     Ok((StatusCode::OK, "my_hash"))
 }

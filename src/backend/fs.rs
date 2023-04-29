@@ -20,7 +20,7 @@ use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
 use crate::{config::SYS_CFG, prelude::*};
 
 pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake3Hash> {
-    debug!("Write file, len: {}", file_bytes.len());
+    debug!("GOT HERE:: Write file, len: {}", file_bytes.len());
 
     trace!("Create a shared secret using ECDH");
     let sk = SYS_CFG.private_key;
@@ -32,27 +32,21 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
 
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
 
-    trace!("Check if file catalog already exists");
-    let path = SYS_CFG
-        .volumes
-        .get(0)
-        .expect("First volume present")
-        .path
-        .join(CATALOG_DIR)
-        .join(file_hash.to_string());
+    trace!("Check if file catalog already exists ");
+    // let path = SYS_CFG
+    //     .volumes
+    //     .get(0)
+    //     .expect("First volume present")
+    //     .path
+    //     .join(CATALOG_DIR)
+    //     .join(file_hash.to_string());
 
-    if path.exists() {
-        trace!(
-            "FS PATH to FILE EXISTS STOP WRITING TO CATALOG {}",
-            &path.to_string_lossy()
-        );
-        return Err(anyhow!("This file already exists for this user."));
-    } else {
-        trace!(
-            "CATALOG file doesn't exist: CONINTUE WRITING TO CATALOG {}",
-            &path.to_string_lossy()
-        );
-    }
+    // if path.exists() {
+    //     trace!("FILE EXISTS{}", &path.to_string_lossy());
+    //     return Err(anyhow!("This file already exists for this user."));
+    // } else {
+    //     trace!("CATALOG !EXISTS{}", &path.to_string_lossy());
+    // }
 
     trace!("Segment files");
     let segments_iter = file_bytes.par_chunks_exact(SEGMENT_SIZE);
@@ -112,8 +106,9 @@ pub async fn write_file(pk: &Secp256k1PubKey, file_bytes: &[u8]) -> Result<Blake
             .collect::<Result<Vec<BaoHash>>>()?;
 
         trace!("Append each hash to its catalog, plus its format");
-        write_catalog(&file_hash, &segment_hashes)?;
 
+        write_catalog(&file_hash, &segment_hashes)?;
+        debug!("AM I HERE???");
         debug!("Finished write_file");
         /* WARNING THIS CASUES ALL CODE THERE AFTER TO NOT BE CALLED */
         Ok(file_hash)
@@ -159,6 +154,7 @@ pub fn write_segment(
 
 pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<()> {
     debug!("Write catalog");
+
     let contents: Vec<u8> = segment_hashes
         .iter()
         .flat_map(|bao_hash| bao_hash.to_bytes())
@@ -172,11 +168,12 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Resu
             let path = volume.path.join(CATALOG_DIR).join(file_hash.to_string());
 
             trace!("Open catalog file at {}", path.to_string_lossy());
-            let mut file = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&path)?;
+            let mut file = fs::File::create(&path)?;
 
+            // let mut file = OpenOptions::new()
+            //     .create_new(true)
+            //     .write(true)
+            //     .open(&path)?;
             trace!("Write file contents");
             file.write_all(&contents)?;
             file.flush()?;
