@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::fs;
-use std::io::Read;
 use std::sync::RwLock;
 use std::{net::SocketAddr, str::FromStr};
 //use axum::extract::FromRequestParts;
@@ -38,7 +37,7 @@ async fn post_file<'a>(
     Path(pk): Path<String>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
-    while let Some(mut field) = multipart.next_field().await.unwrap() {
+    while let Some(field) = multipart.next_field().await.unwrap() {
         let name = field.name().unwrap().to_string();
         //let data: Bytes = field.bytes().await.unwrap();
         let data: Bytes = field.bytes().await.unwrap();
