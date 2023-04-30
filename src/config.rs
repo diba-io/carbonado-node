@@ -43,6 +43,7 @@ pub struct Volume {
 
 #[derive(Deserialize)]
 struct SysCfgFile {
+    http_port: Option<u16>,
     private_key: Option<SecretKey>,
     volumes: Option<Vec<Volume>>,
     capacity: Option<u64>,
@@ -50,6 +51,7 @@ struct SysCfgFile {
 
 #[derive(Serialize)]
 pub struct SysCfg {
+    pub http_port: u16,
     pub private_key: SecretKey,
     pub volumes: Vec<Volume>,
     /// Total allocated capacity for the node in megabytes
@@ -78,6 +80,8 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     let sys_cfg: SysCfgFile = toml::from_str(&cfg_contents)?;
 
+    let http_port = sys_cfg.http_port.unwrap_or(7000);
+
     let private_key = sys_cfg
         .private_key
         .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
@@ -100,13 +104,17 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         });
 
     for vol in volumes.iter() {
-        create_dir_all(&vol.path.join(SEGMENT_DIR))?;
-        create_dir_all(&vol.path.join(CATALOG_DIR))?;
+        let segment_dir = vol.path.join(SEGMENT_DIR);
+        let catalog_dir = vol.path.join(CATALOG_DIR);
+        info!("Creating dirs {segment_dir:?} and {catalog_dir:?}");
+        create_dir_all(&segment_dir)?;
+        create_dir_all(&catalog_dir)?;
     }
 
     let capacity = sys_cfg.capacity.unwrap_or(1_000);
 
     let config = SysCfg {
+        http_port,
         private_key,
         volumes,
         capacity,
@@ -114,7 +122,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     trace!("Write parsed config back out to config file");
     let toml = toml::to_string_pretty(&config)?;
-    info!("Config: {toml}");
+
     cfg_file.write_all(toml.as_bytes())?;
     cfg_file.flush()?;
 

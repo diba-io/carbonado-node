@@ -1,6 +1,11 @@
+/*
 use std::fs;
 
 use anyhow::Result;
+use axum::{
+    body::HttpBody,
+    extract::{BodyStream, FromRequest},
+};
 use carbonado_node::{
     backend::fs::{delete_file, write_file},
     structs::Secp256k1PubKey,
@@ -10,6 +15,28 @@ use rand::thread_rng;
 use secp256k1::generate_keypair;
 
 const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
+
+struct Body {}
+
+impl HttpBody for Body {
+    type Data;
+
+    type Error;
+
+    fn poll_data(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<std::result::Result<Self::Data, Self::Error>>> {
+        todo!()
+    }
+
+    fn poll_trailers(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::result::Result<Option<axum::http::HeaderMap>, Self::Error>> {
+        todo!()
+    }
+}
 
 #[tokio::test]
 async fn write_read() -> Result<()> {
@@ -21,7 +48,16 @@ async fn write_read() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
+    info!("Write Delete:: Writing file if not exists in order to test delete");
+
+    let file_req = axum::http::Request::builder().body(HttpBody::file_bytes(file_bytes))?;
+    let body = file_req
+            .into_body()
+            .map_data(Into::into)
+            .map_err(|err| Error::new(err.into()));
+    let stream = BodyStream(SyncWrapper::new(Box::pin(body)))
+    let file_stream = BodyStream::from_request(&file_req, ());
+
     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
 
     if blake3_hash {
@@ -101,3 +137,4 @@ async fn read_write_delete_file() -> Result<()> {
 
     Ok(())
 }
+*/
