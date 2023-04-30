@@ -26,7 +26,7 @@ async fn write_read() -> Result<()> {
     info!("Write Delete:: Writing file if not exists in order to test delete");
 
     let file_bytes = stream::iter(file_bytes)
-        .chunks(1024)
+        .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
@@ -61,7 +61,7 @@ async fn check_catalog_exists() -> Result<()> {
     debug!("{} bytes read", file_bytes.len());
 
     let file_bytes = stream::iter(file_bytes)
-        .chunks(1024)
+        .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
@@ -82,7 +82,7 @@ async fn read_write_delete_file() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     let file_bytes = stream::iter(file_bytes)
-        .chunks(1024)
+        .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
@@ -106,7 +106,7 @@ async fn read_write_delete_file() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     let file_bytes = stream::iter(file_bytes)
-        .chunks(1024)
+        .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
