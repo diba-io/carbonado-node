@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
-use log::{info, trace};
+use log::trace;
 use once_cell::sync::Lazy;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
@@ -106,7 +106,6 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
     for vol in volumes.iter() {
         let segment_dir = vol.path.join(SEGMENT_DIR);
         let catalog_dir = vol.path.join(CATALOG_DIR);
-        info!("Creating dirs {segment_dir:?} and {catalog_dir:?}");
         create_dir_all(&segment_dir)?;
         create_dir_all(&catalog_dir)?;
     }

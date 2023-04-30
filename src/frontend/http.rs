@@ -8,8 +8,11 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+use futures_util::{
+    stream::{self},
+    StreamExt,
+};
 use log::info;
-
 use tower_http::cors::CorsLayer;
 
 use crate::{
@@ -18,12 +21,24 @@ use crate::{
     prelude::*,
 };
 
+#[axum_macros::debug_handler]
 async fn post_file(
     Path(pk): Path<String>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, AppError> {
     let pk = &Secp256k1PubKey::try_from(pk.as_str())?;
-    let Blake3Hash(hash) = write_file(pk, body).await?;
+
+    let file_stream = stream::try_unfold(body, |mut body_stream| async {
+        if let Some(chunk) = body_stream.next().await {
+            let bytes = chunk?;
+            Ok(Some((bytes, body_stream)))
+        } else {
+            Ok(None)
+        }
+    });
+
+    let Blake3Hash(hash) = write_file(pk, file_stream.boxed()).await?;
+
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 

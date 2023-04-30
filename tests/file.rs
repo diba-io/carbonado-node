@@ -1,42 +1,17 @@
-/*
 use std::fs;
 
 use anyhow::Result;
-use axum::{
-    body::HttpBody,
-    extract::{BodyStream, FromRequest},
-};
-use carbonado_node::{
-    backend::fs::{delete_file, write_file},
-    structs::Secp256k1PubKey,
+use axum::body::Bytes;
+use carbonado_node::{backend::fs::write_file, structs::Secp256k1PubKey};
+use futures_util::{
+    stream::{self},
+    StreamExt,
 };
 use log::{debug, info};
 use rand::thread_rng;
 use secp256k1::generate_keypair;
 
 const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
-
-struct Body {}
-
-impl HttpBody for Body {
-    type Data;
-
-    type Error;
-
-    fn poll_data(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<std::result::Result<Self::Data, Self::Error>>> {
-        todo!()
-    }
-
-    fn poll_trailers(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<Option<axum::http::HeaderMap>, Self::Error>> {
-        todo!()
-    }
-}
 
 #[tokio::test]
 async fn write_read() -> Result<()> {
@@ -50,15 +25,12 @@ async fn write_read() -> Result<()> {
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
 
-    let file_req = axum::http::Request::builder().body(HttpBody::file_bytes(file_bytes))?;
-    let body = file_req
-            .into_body()
-            .map_data(Into::into)
-            .map_err(|err| Error::new(err.into()));
-    let stream = BodyStream(SyncWrapper::new(Box::pin(body)))
-    let file_stream = BodyStream::from_request(&file_req, ());
+    let file_bytes = stream::iter(file_bytes)
+        .chunks(1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_bytes).await.is_ok();
 
     if blake3_hash {
         info!(
@@ -67,8 +39,9 @@ async fn write_read() -> Result<()> {
         );
     }
 
-    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
-    debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+    // TODO: This is not how you delete files
+    // let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
+    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
 
     debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
     info!("Write/Delete test finished successfully!");
@@ -76,24 +49,29 @@ async fn write_read() -> Result<()> {
     Ok(())
 }
 
-// #[tokio::test]
-// // #[should_panic]
-// async fn check_catalog_exists() -> Result<()> {
-//     carbonado::utils::init_logging(RUST_LOG);
+#[tokio::test]
+// #[should_panic]
+async fn check_catalog_exists() -> Result<()> {
+    carbonado::utils::init_logging(RUST_LOG);
 
-//     let (_sk, pk) = generate_keypair(&mut thread_rng());
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-//     info!("Reading file bytes");
-//     let file_bytes = fs::read("tests/samples/cat.gif")?;
-//     debug!("{} bytes read", file_bytes.len());
+    info!("Reading file bytes");
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    debug!("{} bytes read", file_bytes.len());
 
-//     info!("Writing file if not exists");
-//     let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_err();
-//     debug!("Skip writing file as File hash exists: {blake3_hash}");
-//     assert!(blake3_hash);
+    let file_bytes = stream::iter(file_bytes)
+        .chunks(1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
 
-//     Ok(())
-// }
+    info!("Writing file if not exists");
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_bytes).await.is_err();
+    debug!("Skip writing file as File hash exists: {blake3_hash}");
+    assert!(blake3_hash);
+
+    Ok(())
+}
 
 #[tokio::test]
 async fn read_write_delete_file() -> Result<()> {
@@ -103,11 +81,16 @@ async fn read_write_delete_file() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
+    let file_bytes = stream::iter(file_bytes)
+        .chunks(1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
+
     // first file to write
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
+    let file_did_write = write_file(&Secp256k1PubKey(pk), file_bytes).await.is_ok();
 
     if file_did_write {
         info!(
@@ -119,8 +102,16 @@ async fn read_write_delete_file() -> Result<()> {
     // second file to write
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    debug!("{} Write Delete:: bytes read", file_bytes.len());
+
+    let file_bytes = stream::iter(file_bytes)
+        .chunks(1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
+
+    info!("Write Delete:: Writing file if not exists in order to test delete");
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_bytes).await.is_ok();
 
     if blake3_hash {
         info!(
@@ -129,12 +120,14 @@ async fn read_write_delete_file() -> Result<()> {
         );
     }
 
-    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
-    debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+    // TODO: This is not how you delete files
+    // let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
+    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+
+    // TODO: Check number of files
 
     debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
     info!("Write/Delete test finished successfully!");
 
     Ok(())
 }
-*/

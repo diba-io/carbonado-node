@@ -6,56 +6,51 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
-use axum::extract::BodyStream;
+use anyhow::{anyhow, Error, Result};
+use axum::body::Bytes;
 use carbonado::{
     constants::{Format, FEC_M},
     fs::Header,
     structs::Encoded,
 };
-use futures_util::StreamExt;
+use futures_util::{stream::BoxStream, StreamExt, TryStreamExt};
 use log::{debug, trace};
 use rayon::prelude::*;
 use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
 
 use crate::{config::SYS_CFG, prelude::*};
 
-pub async fn write_file(pk: &Secp256k1PubKey, mut file_stream: BodyStream) -> Result<Blake3Hash> {
+pub type FileStream<'a> = BoxStream<'a, Result<Bytes>>;
+
+pub async fn write_file<'a>(
+    pk: &Secp256k1PubKey,
+    file_stream: FileStream<'a>,
+) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let sk = SYS_CFG.private_key;
-    let ss = SharedSecret::new(&pk.into_inner(), &sk);
-    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss.secret_bytes())?);
+    let ss = SharedSecret::new(&pk.into_inner(), &sk).secret_bytes();
+    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
 
     let pk_bytes = write_pk.serialize();
     let (x_only_pk, _) = write_pk.x_only_public_key();
 
     trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = blake3::Hasher::new_keyed(&x_only_pk.serialize());
+    let mut file_hasher = blake3::Hasher::new_keyed(&x_only_pk.serialize());
 
     trace!("Iterate through file body stream");
-    let mut segment: Vec<u8> = vec![];
-    let mut segment_hashes = vec![];
-
-    while let Some(chunk) = file_stream.next().await {
-        segment.extend(chunk?.as_ref());
-
-        if segment.len() > SEGMENT_SIZE {
-            let remainder = segment.split_off(SEGMENT_SIZE);
-
+    let segment_hashes = file_stream
+        .map(|segment: Result<Bytes>| {
+            let segment = segment?;
+            file_hasher.update(&segment);
             let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
-            let segment_hash = write_segment(&ss.secret_bytes(), &encoded_segment)?;
-            segment_hashes.push(segment_hash);
+            let segment_hash = write_segment(&ss, &encoded_segment)?;
 
-            segment = remainder;
-        }
-    }
+            Ok::<BaoHash, Error>(segment_hash)
+        })
+        .try_collect::<Vec<BaoHash>>()
+        .await?;
 
-    // Encode remainder
-    let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
-    let segment_hash = write_segment(&ss.secret_bytes(), &encoded_segment)?;
-    segment_hashes.push(segment_hash);
-
-    let file_hash = Blake3Hash(file_hasher.finalize());
+    let file_hash: Blake3Hash = Blake3Hash(file_hasher.finalize());
 
     trace!("Check if segment already exists");
     let path = SYS_CFG
@@ -73,7 +68,7 @@ pub async fn write_file(pk: &Secp256k1PubKey, mut file_stream: BodyStream) -> Re
     }
 
     trace!("Append each hash to its catalog, plus its format");
-    write_catalog(&file_hash, &segment_hashes)?;
+    write_catalog(&file_hash, segment_hashes)?;
 
     debug!("Finished write_file");
     Ok(file_hash)
@@ -131,7 +126,7 @@ pub fn write_segment(sk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
     Ok(BaoHash(bao_hash.to_owned()))
 }
 
-pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<()> {
+pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: Vec<BaoHash>) -> Result<()> {
     debug!("Write catalog");
     let contents: Vec<u8> = segment_hashes
         .iter()
