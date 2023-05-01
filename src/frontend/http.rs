@@ -16,7 +16,7 @@ use log::info;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, write_file},
+    backend::fs::{delete_file, read_file, write_file, FileStream},
     config::SYS_CFG,
     prelude::*,
 };
@@ -28,16 +28,17 @@ async fn post_file(
 ) -> Result<impl IntoResponse, AppError> {
     let pk = &Secp256k1PubKey::try_from(pk.as_str())?;
 
-    let file_stream = stream::try_unfold(body, |mut body_stream| async {
+    let file_stream: FileStream = stream::try_unfold(body, |mut body_stream| async {
         if let Some(chunk) = body_stream.next().await {
             let bytes = chunk?;
             Ok(Some((bytes, body_stream)))
         } else {
             Ok(None)
         }
-    });
+    })
+    .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream.boxed()).await?;
+    let Blake3Hash(hash) = write_file(pk, file_stream).await?;
 
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
