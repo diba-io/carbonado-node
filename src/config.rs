@@ -7,9 +7,9 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
-use log::trace;
+use log::{info, trace};
 use once_cell::sync::Lazy;
-use secp256k1::SecretKey;
+use secp256k1::{Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
 
 use crate::prelude::{CATALOG_DIR, SEGMENT_DIR};
@@ -85,6 +85,9 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
     let private_key = sys_cfg
         .private_key
         .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
+
+    let secp = Secp256k1::new();
+    info!("Node Public Key: {}", private_key.public_key(&secp));
 
     let volumes: Vec<Volume> = sys_cfg
         .volumes

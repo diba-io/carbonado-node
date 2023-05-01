@@ -64,7 +64,7 @@ pub async fn write_file<'a>(
     trace!("Read catalog at {path:?}");
 
     if path.exists() {
-        return Err(anyhow!("This file already exists for this user."));
+        return Err(anyhow!("This file already exists for this public key."));
     }
 
     trace!("Append each hash to its catalog, plus its format");
