@@ -10,7 +10,7 @@ use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
 use carbonado::{
     constants::{Format, FEC_M},
-    fs::Header,
+    file::Header,
     structs::Encoded,
 };
 use futures_util::{stream::BoxStream, StreamExt, TryStreamExt};
@@ -43,7 +43,7 @@ pub async fn write_file<'a>(
             let segment = segment?;
             file_hasher.update(&segment);
             let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
-            let segment_hash = write_segment(&ss, &encoded_segment)?;
+            let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
 
             Ok::<BaoHash, Error>(segment_hash)
         })
@@ -74,7 +74,7 @@ pub async fn write_file<'a>(
     Ok(file_hash)
 }
 
-pub fn write_segment(sk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
+pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
     let Encoded(encoded_bytes, bao_hash, encode_info) = encoded;
     trace!("Encoded bytes len: {}", encoded_bytes.len());
 
@@ -93,6 +93,7 @@ pub fn write_segment(sk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
             let format = Format::try_from(NODE_FORMAT)?;
             let header = Header::new(
                 sk,
+                pk,
                 bao_hash.as_bytes(),
                 format,
                 chunk_index as u8,
@@ -204,7 +205,7 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
                     let mut bytes = vec![];
                     file.read_to_end(&mut bytes).unwrap();
 
-                    let (_header, chunk) = bytes.split_at(Header::len() as usize);
+                    let (_header, chunk) = bytes.split_at(Header::len());
 
                     chunk.to_owned()
                 })
