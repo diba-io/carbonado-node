@@ -8,11 +8,7 @@ use std::{
 
 use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
-use carbonado::{
-    constants::{Format, FEC_M},
-    file::Header,
-    structs::Encoded,
-};
+use carbonado::{constants::Format, file::Header, structs::Encoded};
 use futures_util::{stream::BoxStream, StreamExt, TryStreamExt};
 use log::{debug, trace};
 use rayon::prelude::*;
@@ -78,7 +74,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
     let Encoded(encoded_bytes, bao_hash, encode_info) = encoded;
     trace!("Encoded bytes len: {}", encoded_bytes.len());
 
-    let encoded_chunk_size = encode_info.bytes_verifiable as usize / FEC_M;
+    let encoded_chunk_size = encode_info.bytes_verifiable as usize / SYS_CFG.volumes.len();
     trace!("Encoded chunk size: {}", encoded_chunk_size);
 
     encoded_bytes
@@ -164,11 +160,6 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
 
     trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
     let catalog_file = read_catalog(blake3_hash)?;
-
-    trace!("Get eight storage volumes from config");
-    if SYS_CFG.volumes.len() != FEC_M {
-        return Err(anyhow!("Eight volume paths must be configured"));
-    }
 
     trace!("Create a shared secret using ECDH");
     let sk = SYS_CFG.private_key;

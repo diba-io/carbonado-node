@@ -96,10 +96,15 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
     let orig_volumes = sys_cfg.volumes.unwrap_or_default();
     let mut volumes: Vec<Volume> = vec![];
+    let base_dirs = BaseDirs::new();
+    let base_dir = match base_dirs {
+        Some(base_dir) => base_dir.home_dir().to_owned(),
+        None => PathBuf::from("/tmp"),
+    };
 
     for i in 0..drive_redundancy {
-        let volume = orig_volumes.get(i).map(|v| v.to_owned()).unwrap_or(Volume {
-            path: PathBuf::from(format!("/tmp/carbonado-{i}")),
+        let volume: Volume = orig_volumes.get(i).map(|v| v.to_owned()).unwrap_or(Volume {
+            path: base_dir.join("Carbonado").join(format!("Volume_{i}")),
         });
 
         volumes.push(volume.to_owned());
