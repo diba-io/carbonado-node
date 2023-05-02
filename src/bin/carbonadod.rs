@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
             .max_log_level(log::LevelFilter::Info)
             .build(sys_logger);
 
-        let logger = Logger::try_with_str("debug, carbonado=debug")?
+        let logger = Logger::try_with_str("debug, carbonado_node=debug")?
             .adaptive_format_for_stderr(AdaptiveFormat::Detailed)
             .adaptive_format_for_stdout(AdaptiveFormat::Detailed)
             .set_palette("196;208;10;7;8".to_owned())

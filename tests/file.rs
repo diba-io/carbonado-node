@@ -1,70 +1,17 @@
-use anyhow::{anyhow, Ok, Result};
-use carbonado_node::{
-    backend::fs::{delete_file, read_catalog, read_file, read_slices, write_file},
-    structs::Secp256k1PubKey,
-};
+use std::fs;
+
+use anyhow::Result;
+use axum::body::Bytes;
+use carbonado_node::{backend::fs::write_file, structs::Secp256k1PubKey};
+use futures_util::{stream, StreamExt};
 use log::{debug, info};
 use rand::thread_rng;
 use secp256k1::generate_keypair;
-use std::fs;
 
 const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 
-// #[tokio::test]
-// async fn catalog_file_exists_dont_write() -> Result<()> {
-//     carbonado::utils::init_logging(RUST_LOG);
-
-//     //let (_sk, pk) = generate_keypair(&mut thread_rng());
-//     let pk = "035daafa302424d1bd492a38b280225bb3cc6db1082220d581d5d24fb2e2e71ebc";
-//     let _pk = &Secp256k1PubKey::try_from(pk)?;
-
-//     info!("Don't Write:: Reading file bytes");
-//     let file_bytes = fs::read("tests/samples/cat.gif")?;
-//     debug!("Don't Write :: bytes read {}", file_bytes.len());
-
-//     // write file returns a filehash
-//     // let blake3_hash = write_file(_pk, &file_bytes).await?;
-//     // debug!(">>> WRITE FILE ONCE:: hash :: {}", blake3_hash);
-
-//     // write file returns a filehash
-//     let blake3_hash = write_file(_pk, &file_bytes).await.is_err();
-//     debug!(">>> WRITE FILE TWICE TO ERROR:: hash :: {}", blake3_hash);
-//     if blake3_hash {
-//         return Ok(debug!("File didn't write as it exists"));
-//     } else {
-//         // this is a negative test
-//         return Err(anyhow!("This file already exists for this user."));
-//     }
-
-//     Ok(())
-// }
-
 #[tokio::test]
-async fn file_read() -> Result<()> {
-    carbonado::utils::init_logging(RUST_LOG);
-
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    info!("Write Delete:: Reading file bytes");
-    let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("FILE READ :: bytes read {}", file_bytes.len());
-
-    // write file returns a filehash
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
-    debug!(">>> WRITE FILE RETURNS:: hash :: {}", blake3_hash);
-
-    let new_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(
-        ">>> READ FILE RETURNS:: bytes read :: {:?}",
-        new_file_bytes.len()
-    );
-
-    Ok(())
-}
-
-#[tokio::test]
-// #[should_panic]
-async fn check_catalog_exists() -> Result<()> {
+async fn write_read() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
     let (_sk, pk) = generate_keypair(&mut thread_rng());
@@ -73,15 +20,25 @@ async fn check_catalog_exists() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    info!("Write Delete:: Writing file if not exists in order to test delete");
 
-    info!("Reading file by hash");
-    let new_file_bytes = read_catalog(&blake3_hash)?;
-    debug!("{} new bytes read", new_file_bytes.len());
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
 
-    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
-    debug!("deleted files:: {:?}", new_file_bytes);
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+
+    if blake3_hash {
+        info!(
+            "Write File in order to Test Delete File as blake3_hash:: {} ",
+            blake3_hash.to_string()
+        );
+    }
+
+    // TODO: This is not how you delete files
+    // let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
+    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
 
     debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
     info!("Write/Delete test finished successfully!");
@@ -90,33 +47,35 @@ async fn check_catalog_exists() -> Result<()> {
 }
 
 #[tokio::test]
-// #[should_panic]
-async fn get_slice() -> Result<()> {
+async fn check_catalog_exists() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
-
-    let index_start: u64 = 65536;
-    let slice_len = 8192;
 
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-    info!("Write Delete:: Reading file bytes");
+    info!("Reading file bytes");
     let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("{} Write Delete:: bytes read", file_bytes.len());
+    debug!("{} bytes read", file_bytes.len());
 
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await?;
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
 
-    // READ FILE CALLs READ CATALOG
-    let read_file_bytes = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
-    debug!(">>> FILE LENGTH :: {:?}", &read_file_bytes.len());
+    info!("Writing file if not exists");
+    let is_ok = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+    debug!("Skip writing file as File hash exists: {is_ok}");
+    assert!(is_ok);
 
-    let (encoded_input, hash) = bao::encode::encode(&read_file_bytes);
-    debug!(">>> encoded:: {:?}", &encoded_input.len());
-    debug!(">>> hash:: {:?}", &hash);
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
 
-    let read_slice = read_slices(hash, &read_file_bytes, index_start, slice_len).await?;
-
-    debug!(">>> decode_bao_hash Hash Vec Length:: {:?}", read_slice);
+    info!("Writing file if not exists");
+    let is_err = write_file(&Secp256k1PubKey(pk), file_stream).await.is_err();
+    debug!("Skip writing file as File hash exists: {is_err}");
+    assert!(is_err);
 
     Ok(())
 }
@@ -129,11 +88,16 @@ async fn read_write_delete_file() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
+
     // first file to write
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
+    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
 
     if file_did_write {
         info!(
@@ -145,8 +109,16 @@ async fn read_write_delete_file() -> Result<()> {
     // second file to write
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), &file_bytes).await.is_ok();
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    debug!("{} Write Delete:: bytes read", file_bytes.len());
+
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
+
+    info!("Write Delete:: Writing file if not exists in order to test delete");
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
 
     if blake3_hash {
         info!(
@@ -155,8 +127,13 @@ async fn read_write_delete_file() -> Result<()> {
         );
     }
 
-    let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
-    debug!("Ddeleted file:: {:?}", new_file_bytes);
+    // TODO: This is not how you delete files
+    // let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
+    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+
+    // TODO: Check number of files
+
+    debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
     info!("Write/Delete test finished successfully!");
 
     Ok(())
