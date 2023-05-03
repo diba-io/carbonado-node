@@ -109,8 +109,7 @@ async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, App
 async fn remove_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    delete_file(pk, blake3_hash.as_bytes())?;
+    delete_file(&blake3_hash).await?;
     Ok((StatusCode::OK, blake3_hash))
 }
 
