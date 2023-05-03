@@ -2,8 +2,7 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Write},
-    path::{Path, PathBuf},
+    io::{Read, Write},
     str::FromStr,
 };
 

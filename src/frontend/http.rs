@@ -106,16 +106,14 @@ async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, App
 }
 
 #[axum_macros::debug_handler]
-async fn remove_file(
-    Path((pk, blake3_hash)): Path<(String, String)>,
-) -> Result<impl IntoResponse, AppError> {
+async fn remove_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, AppError> {
     delete_file(&blake3_hash).await?;
     Ok((StatusCode::OK, blake3_hash))
 }
 
 pub async fn start() -> Result<()> {
     let app = Router::new()
-        .route("/remove/:pk/:blake3_hash", delete(remove_file))
+        .route("/remove/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/last_hash/:pk", get(get_last_hash))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))

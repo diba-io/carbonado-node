@@ -87,26 +87,6 @@ async fn check_catalog_exists() -> Result<()> {
 async fn read_write_delete_file() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
-    // info!("Write Delete:: Reading file bytes");
-    // let file_bytes = fs::read("tests/samples/cat.gif")?;
-    // debug!("{} Write Delete:: bytes read", file_bytes.len());
-
-    // let file_stream = stream::iter(file_bytes)
-    //     .chunks(1024 * 1024)
-    //     .map(|chunk| Ok(Bytes::from(chunk)))
-    //     .boxed();
-
-    // // first file to write
-    // let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    // // info!("Write Delete:: Writing file if not exists in order to test delete");
-    // let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream).await?;
-
-    // info!(
-    //     "DON'T Delete FIRST File as blake3_hash:: {} ",
-    //     file_did_write.to_string()
-    // );
-
     // second file to write
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
