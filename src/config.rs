@@ -85,7 +85,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
     let secp = Secp256k1::new();
     info!("Node Public Key: {}", private_key.public_key(&secp));
 
-    let drive_redundancy = sys_cfg.drive_redundancy.unwrap_or(1);
+    let drive_redundancy = sys_cfg.drive_redundancy.unwrap_or(4);
 
     match drive_redundancy {
         1 | 2 | 4 | 8 => {}
