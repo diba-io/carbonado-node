@@ -2,25 +2,44 @@ use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
-    body::Bytes,
-    extract::Path,
+    extract::{BodyStream, Path},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Router,
 };
+use futures_util::{
+    stream::{self},
+    StreamExt,
+};
 use log::info;
-
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, write_file},
+    backend::fs::{delete_file, read_file, write_file, FileStream},
+    config::SYS_CFG,
     prelude::*,
 };
 
-async fn post_file(Path(pk): Path<String>, body: Bytes) -> Result<impl IntoResponse, AppError> {
-    let _pk = &Secp256k1PubKey::try_from(pk.as_str())?;
-    let Blake3Hash(hash) = write_file(_pk, &body).await?;
+#[axum_macros::debug_handler]
+async fn post_file(
+    Path(pk): Path<String>,
+    body: BodyStream,
+) -> Result<impl IntoResponse, AppError> {
+    let pk = &Secp256k1PubKey::try_from(pk.as_str())?;
+
+    let file_stream: FileStream = stream::try_unfold(body, |mut body_stream| async {
+        if let Some(chunk) = body_stream.next().await {
+            let bytes = chunk?;
+            Ok(Some((bytes, body_stream)))
+        } else {
+            Ok(None)
+        }
+    })
+    .boxed();
+
+    let Blake3Hash(hash) = write_file(pk, file_stream).await?;
+
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
@@ -53,7 +72,7 @@ pub async fn start() -> Result<()> {
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 7000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], SYS_CFG.http_port));
 
     info!("carbonado-node HTTP frontend successfully running at {addr}");
 
