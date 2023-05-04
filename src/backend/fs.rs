@@ -182,7 +182,7 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
                 .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
             let chunk_file = OpenOptions::new().read(true).open(chunk_path).unwrap();
-            let header = Header::try_from(chunk_file).unwrap();
+            let header = Header::try_from(&chunk_file).unwrap();
 
             let segment = SYS_CFG
                 .volumes

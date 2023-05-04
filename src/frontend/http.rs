@@ -54,11 +54,6 @@ async fn post_file(
 
     let Blake3Hash(hash) = write_file(pk, file_stream).await?;
 
-    // store hash into lock to get a response body for carbonado client
-    let hash_to_string = hash.to_string();
-    let mut w = LOCK.write().unwrap();
-    *w = hash_to_string;
-
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
