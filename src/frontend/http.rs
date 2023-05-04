@@ -3,7 +3,7 @@ use std::{net::SocketAddr, str::FromStr};
 use anyhow::Result;
 use axum::{
     body::StreamBody,
-    extract::{BodyStream, Path, Query},
+    extract::{BodyStream, Path},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -13,11 +13,10 @@ use bytes::BytesMut;
 use futures_util::{stream, StreamExt};
 use log::{debug, info, trace};
 use secp256k1::PublicKey;
-use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, read_slices, write_file, FileStream},
+    backend::fs::{delete_file, read_file, write_file, FileStream},
     config::{node_shared_secret, SYS_CFG},
     prelude::*,
 };
@@ -71,11 +70,8 @@ async fn get_file(
 }
 
 #[axum_macros::debug_handler]
-async fn remove_file(
-    Path((pk, blake3_hash)): Path<(String, String)>,
-) -> Result<impl IntoResponse, AppError> {
-    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    delete_file(pk, blake3_hash.as_bytes())?;
+async fn remove_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, AppError> {
+    delete_file(&blake3_hash).await?;
     Ok((StatusCode::OK, blake3_hash))
 }
 

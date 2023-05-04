@@ -1,8 +1,8 @@
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Seek, Write},
-    path::{Path, PathBuf},
+    io::{Read, Seek, Write},
     pin::Pin,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -257,10 +257,10 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
 }
 
 pub async fn read_slices(
-    hash: bao::Hash, // from Blake3
+    //hash: bao::Hash, // from Blake3
     file_bytes: &[u8],
-    slice_start: u64, //let slice_start = 65536;
-    slice_len: u16,   // let slice_len = 8192;
+    //slice_start: u64, //let slice_start = 65536;
+    //slice_len: u16,   // let slice_len = 8192;
 ) -> Result<Vec<u8>> {
     use std::io::prelude::*;
 
@@ -285,62 +285,38 @@ pub async fn read_slices(
     let mut decoded = Vec::new();
     let mut decoder = bao::decode::SliceDecoder::new(&*slice, &hash, slice_start, slice_len);
     decoder.read_to_end(&mut decoded)?;
-    // assert_eq!(
-    //     &encoded_input[slice_start as usize..][..slice_len as usize],
-    //     &*decoded
-    // );
+
     debug!(
         "usize vs length: {:?}",
         &encoded_input[slice_start as usize..][..slice_len as usize].len()
     );
 
     // Like regular decoding, slice decoding will fail if the hash doesn't match.
-    let mut bad_slice = slice.clone();
-    debug!("BAD SLICE");
-    let last_index = bad_slice.len() - 1;
-    bad_slice[last_index] ^= 1;
-    let mut decoder = bao::decode::SliceDecoder::new(&*bad_slice, &hash, slice_start, slice_len);
-    let err = decoder.read_to_end(&mut Vec::new()).unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, err.kind());
+    // let mut bad_slice = slice.clone();
+    // debug!("BAD SLICE");
+    // let last_index = bad_slice.len() - 1;
+    // bad_slice[last_index] ^= 1;
+    // let mut decoder = bao::decode::SliceDecoder::new(&*bad_slice, &hash, slice_start, slice_len);
+    // let err = decoder.read_to_end(&mut Vec::new()).unwrap_err();
+    // assert_eq!(std::io::ErrorKind::InvalidData, err.kind());
 
     Ok(decoded)
 }
 
-pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
-    let pk_bytes = pk.to_bytes();
-    let (x_only_pk, _) = pk.into_inner().x_only_public_key();
-
-    let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
-    trace!(">>>>>file_hash::   {}", file_hash);
+pub async fn delete_file(hash: &String) -> Result<()> {
+    let blake3_hash = &Blake3Hash(blake3::Hash::from_str(hash)?);
 
     for vol in &SYS_CFG.volumes {
-        let seg_file = &vol.path.join(SEGMENT_DIR).join(file_hash.to_string());
-        let seg_dir = &vol.path.join(SEGMENT_DIR);
-        remove_dir_contents(seg_dir, seg_file.to_path_buf()).unwrap();
-    }
+        let cat_path = &vol.path.join(CATALOG_DIR).join(hash);
+        let test_cat = read_catalog(blake3_hash)?;
+        for cat in test_cat {
+            let seg_file = &vol.path.join(SEGMENT_DIR).join(cat.to_string() + ".c15");
+            let is_removed = fs::remove_file(seg_file).is_ok();
+            trace!("{:?} REMOVED:  {:?}", &seg_file, is_removed);
+        }
 
-    for vol in &SYS_CFG.volumes {
-        let cat_path = &vol.path.join(CATALOG_DIR).join(file_hash.to_string());
-        let cat = &vol.path.join(CATALOG_DIR);
-        remove_dir_catalogs(cat.to_path_buf(), cat_path.to_path_buf()).unwrap();
-    }
-    Ok(())
-}
-
-// TODO: These aren't worth breaking out into their own functions
-fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
-    for entry in fs::read_dir(path)? {
-        trace!("Delete Segment File at {:?}", entry);
-        fs::remove_file(entry?.path())?;
-    }
-    Ok(())
-}
-
-#[allow(unused_variables)]
-fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
-    for entry in fs::read_dir(path)? {
-        trace!("Delete CATALOG File at {:?}", entry);
-        fs::remove_file(entry?.path())?;
+        let is_removed = fs::remove_file(cat_path).is_ok();
+        trace!("{:?} REMOVED: {:?}", &cat_path, is_removed);
     }
     Ok(())
 }
