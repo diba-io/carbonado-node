@@ -1,4 +1,7 @@
-use std::{fmt, str::FromStr};
+use std::{
+    fmt::{self, Display},
+    str::FromStr,
+};
 
 use anyhow::{Error, Result};
 
@@ -66,6 +69,14 @@ impl TryFrom<&str> for Secp256k1PubKey {
         let pk = secp256k1::PublicKey::from_str(value)?;
 
         Ok(Self(pk))
+    }
+}
+
+impl Display for Secp256k1PubKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self(pk) = self;
+
+        f.write_str(&pk.to_string())
     }
 }
 

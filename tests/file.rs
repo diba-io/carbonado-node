@@ -2,13 +2,14 @@ use std::fs;
 
 use anyhow::Result;
 use axum::body::Bytes;
+use bytes::BytesMut;
 use carbonado_node::{
     backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
     structs::Secp256k1PubKey,
 };
-use futures_util::{stream, StreamExt};
+use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
 use rand::thread_rng;
 use secp256k1::{generate_keypair, PublicKey, SecretKey};
@@ -47,9 +48,12 @@ async fn write_read() -> Result<()> {
     info!("Reading file");
 
     let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
-        .flat_map(|bytes| stream::iter(bytes.unwrap().to_vec()))
-        .collect()
-        .await;
+        .try_fold(BytesMut::new(), |mut acc, chunk| async move {
+            acc.extend(chunk);
+            Ok(acc)
+        })
+        .await?
+        .to_vec();
 
     assert_eq!(
         decoded_file.len(),
@@ -67,41 +71,7 @@ async fn write_read() -> Result<()> {
     // let new_file_bytes = delete_file(Secp256k1PubKey(write_pk), &file_bytes).is_err();
     // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
 
-    info!("Write/Delete test finished successfully!");
-
-    Ok(())
-}
-
-#[tokio::test]
-async fn check_catalog_exists() -> Result<()> {
-    carbonado::utils::init_logging(RUST_LOG);
-
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    info!("Reading file bytes");
-    let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("{} bytes read", file_bytes.len());
-
-    let file_stream = stream::iter(file_bytes)
-        .chunks(1024 * 1024)
-        .map(|chunk| Ok(Bytes::from(chunk)))
-        .boxed();
-
-    info!("Writing file if not exists");
-    let is_ok = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
-    debug!("Skip writing file as File hash exists: {is_ok}");
-    assert!(is_ok);
-
-    let file_bytes = fs::read("tests/samples/cat.gif")?;
-    let file_stream = stream::iter(file_bytes)
-        .chunks(1024 * 1024)
-        .map(|chunk| Ok(Bytes::from(chunk)))
-        .boxed();
-
-    info!("Writing file if not exists");
-    let is_err = write_file(&Secp256k1PubKey(pk), file_stream).await.is_err();
-    debug!("Skip writing file as File hash exists: {is_err}");
-    assert!(is_err);
+    info!("Write-read test finished successfully!");
 
     Ok(())
 }

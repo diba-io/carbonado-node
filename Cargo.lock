@@ -305,6 +305,7 @@ dependencies = [
  "flexi_logger",
  "flexi_syslog",
  "futures-util",
+ "hex",
  "log",
  "once_cell",
  "par-stream",
