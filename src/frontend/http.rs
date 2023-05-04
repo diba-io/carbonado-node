@@ -2,6 +2,7 @@ use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
+    body::StreamBody,
     extract::{BodyStream, Path},
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -63,9 +64,9 @@ async fn get_file(
 ) -> Result<impl IntoResponse, AppError> {
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
-    let file_bytes = read_file(&pk, &blake3_hash).await?;
+    let file_stream = read_file(&pk, &blake3_hash)?;
 
-    Ok((StatusCode::OK, file_bytes))
+    Ok((StatusCode::OK, StreamBody::new(file_stream)))
 }
 
 #[axum_macros::debug_handler]

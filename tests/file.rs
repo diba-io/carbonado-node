@@ -1,4 +1,4 @@
-use std::{fs, str::FromStr};
+use std::fs;
 
 use anyhow::Result;
 use axum::body::Bytes;
@@ -19,9 +19,10 @@ const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 async fn write_read() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
-    // let (_sk, pk) = generate_keypair(&mut thread_rng());
-    let pk =
-        PublicKey::from_str("032a1c42e4b520d48e7d2661f9af97f8ae646e13a3c0d87f8328da05807a48642d")?;
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+    // TODO: Use after remove_file is finished:
+    // let pk =
+    // PublicKey::from_str("032a1c42e4b520d48e7d2661f9af97f8ae646e13a3c0d87f8328da05807a48642d")?;
     let ss = node_shared_secret(&pk)?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     debug!("Public keys - supplied pk: {pk}, write pk: {write_pk}");
@@ -45,7 +46,10 @@ async fn write_read() -> Result<()> {
 
     info!("Reading file");
 
-    let decoded_file = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
+    let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
+        .flat_map(|bytes| stream::iter(bytes.unwrap().to_vec()))
+        .collect()
+        .await;
 
     assert_eq!(
         decoded_file.len(),

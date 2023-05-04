@@ -2,7 +2,7 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
@@ -11,9 +11,9 @@ use std::{
 use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
-use futures_util::{Stream, TryStreamExt};
+use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 use log::{debug, trace};
-use par_stream::TryParStreamExt;
+use par_stream::{ParStreamExt, TryParStreamExt};
 use rayon::{
     prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     slice::ParallelSlice,
@@ -166,7 +166,7 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: Vec<BaoHash>) -> Re
     Ok(())
 }
 
-pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
+pub fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<FileStream> {
     debug!("Read file by hash: {}", blake3_hash.to_string());
 
     trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
@@ -177,9 +177,8 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
 
     trace!("For each hash, read each chunk into a segment, then decode that segment");
     trace!("Segment files");
-    let file_bytes = catalog_file
-        .par_iter()
-        .flat_map(|segment_hash| {
+    let file_bytes: FileStream = stream::iter(catalog_file)
+        .par_then(None, move |segment_hash| async move {
             let chunk_path = SYS_CFG
                 .volumes
                 .get(0)
@@ -188,39 +187,48 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
                 .join(SEGMENT_DIR)
                 .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
-            let chunk_file = OpenOptions::new().read(true).open(chunk_path).unwrap();
-            let header = Header::try_from(chunk_file).unwrap();
+            let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
+            let header = Header::try_from(&chunk_file)?;
 
-            let segment = SYS_CFG
-                .volumes
-                .par_iter()
-                .flat_map(|volume| {
-                    let path = volume
-                        .path
-                        .join(SEGMENT_DIR)
-                        .join(format!("{segment_hash}.c{NODE_FORMAT}"));
+            let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
+                SYS_CFG
+                    .volumes
+                    .par_iter()
+                    .flat_map(|volume| {
+                        let path = volume
+                            .path
+                            .join(SEGMENT_DIR)
+                            .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
-                    let mut file = OpenOptions::new().read(true).open(path).unwrap();
+                        let mut file = OpenOptions::new().read(true).open(path).unwrap();
 
-                    let mut bytes = vec![];
-                    file.read_to_end(&mut bytes).unwrap();
+                        let mut bytes = vec![];
+                        file.read_to_end(&mut bytes).unwrap();
 
-                    let (_header, chunk) = bytes.split_at(Header::len());
+                        let (_header, chunk) = bytes.split_at(Header::len());
 
-                    chunk.to_owned()
-                })
-                .collect::<Vec<u8>>();
+                        chunk.to_owned()
+                    })
+                    .collect()
+            } else {
+                let mut bytes = vec![];
+                chunk_file.rewind()?;
+                chunk_file.read_to_end(&mut bytes)?;
+                let (_header, chunk) = bytes.split_at(Header::len());
+                chunk.to_vec()
+            };
 
-            carbonado::decode(
+            let bytes = carbonado::decode(
                 &ss,
                 &segment_hash.to_bytes(),
                 &segment,
                 header.padding_len,
                 NODE_FORMAT,
-            )
-            .unwrap()
+            )?;
+
+            Ok(Bytes::from(bytes))
         })
-        .collect::<Vec<u8>>();
+        .boxed();
 
     debug!("Finish read_file");
     Ok(file_bytes)
