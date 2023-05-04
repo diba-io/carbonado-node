@@ -41,7 +41,7 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(write_pk), file_stream).await?;
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
 
     info!("Reading file");
 

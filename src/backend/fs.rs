@@ -13,7 +13,7 @@ use axum::body::Bytes;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
 use futures_util::{Stream, TryStreamExt};
 use log::{debug, trace};
-use par_stream::ParStreamExt;
+use par_stream::TryParStreamExt;
 use rayon::{
     prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     slice::ParallelSlice,
@@ -45,11 +45,10 @@ pub async fn write_file<'a>(pk: &Secp256k1PubKey, file_stream: FileStream) -> Re
     let thread_file_hasher = file_hasher.clone();
 
     let segment_hashes: Vec<BaoHash> = file_stream
-        .par_then(None, move |segment: Result<Bytes>| {
+        .try_par_then(None, move |segment: Bytes| {
             trace!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
             async move {
-                let segment = segment?;
                 thread_file_hasher.lock().await.update(&segment);
                 trace!("Encoding segment");
                 let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
