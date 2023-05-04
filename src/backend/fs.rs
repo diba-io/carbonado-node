@@ -64,7 +64,7 @@ pub async fn write_file<'a>(
     }
 
     trace!("Append each hash to its catalog, plus its format");
-    write_catalog(&file_hash, segment_hashes)?;
+    write_catalog(&file_hash, &segment_hashes)?;
 
     debug!("Finished write_file");
     Ok(file_hash)
@@ -123,7 +123,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
     Ok(BaoHash(bao_hash.to_owned()))
 }
 
-pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: Vec<BaoHash>) -> Result<()> {
+pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<()> {
     debug!("Write catalog");
     let contents: Vec<u8> = segment_hashes
         .iter()
