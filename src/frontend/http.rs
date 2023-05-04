@@ -8,6 +8,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+use bytes::BytesMut;
 use futures_util::{
     stream::{self},
     StreamExt,
@@ -28,14 +29,25 @@ async fn post_file(
 ) -> Result<impl IntoResponse, AppError> {
     let pk = &Secp256k1PubKey::try_from(pk.as_str())?;
 
-    let file_stream: FileStream = stream::try_unfold(body, |mut body_stream| async {
-        if let Some(chunk) = body_stream.next().await {
-            let bytes = chunk?;
-            Ok(Some((bytes, body_stream)))
-        } else {
+    let file_stream: FileStream = stream::try_unfold(
+        (body, BytesMut::with_capacity(SEGMENT_SIZE * 2)),
+        |(mut body_stream, mut remainder)| async {
+            while remainder.len() < SEGMENT_SIZE {
+                if let Some(chunk) = body_stream.next().await {
+                    let bytes = chunk?;
+                    remainder.extend(bytes);
+
+                    if remainder.len() >= SEGMENT_SIZE {
+                        let segment = remainder.split_to(SEGMENT_SIZE);
+                        return Ok(Some((segment.freeze(), (body_stream, remainder))));
+                    }
+                } else {
+                    return Ok(None);
+                }
+            }
             Ok(None)
-        }
-    })
+        },
+    )
     .boxed();
 
     let Blake3Hash(hash) = write_file(pk, file_stream).await?;
