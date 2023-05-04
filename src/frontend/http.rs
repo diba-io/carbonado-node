@@ -13,27 +13,16 @@ use bytes::BytesMut;
 use futures_util::{stream, StreamExt};
 use log::{debug, info, trace};
 use secp256k1::PublicKey;
+use serde::Deserialize;
 use tower_http::cors::CorsLayer;
 
-use crate::backend::fs::read_slices;
 use crate::{
-    backend::fs::{delete_file, read_file, write_file, FileStream},
+    backend::fs::{delete_file, read_file, read_slices, write_file, FileStream},
     config::{node_shared_secret, SYS_CFG},
     prelude::*,
 };
-use serde::Deserialize;
 
 static LOCK: std::sync::RwLock<std::string::String> = RwLock::new(String::new());
-
-#[derive(Deserialize, std::fmt::Debug)]
-
-// can use Options Here.
-struct FileSlice {
-    pk: String,
-    black3_hash: String,
-    index_start: u64,
-    range_end: u16,
-}
 
 #[axum_macros::debug_handler]
 async fn post_file(
@@ -72,6 +61,7 @@ async fn post_file(
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
+// TODO: This seems unnecessary, and could introduce concurrency and security issues
 #[axum_macros::debug_handler]
 async fn get_last_hash(Path(_pk): Path<String>) -> Result<impl IntoResponse, AppError> {
     let hash1 = LOCK.read().unwrap();
@@ -92,6 +82,14 @@ async fn get_file(
 }
 
 /* TODO: Reading slices this way will be very inefficient. Ideally only the specific segment containing the slice is decoded. As a result, this will not be able to make use of read_file.
+#[derive(Deserialize, std::fmt::Debug)]
+struct FileSlice {
+    pk: String,
+    black3_hash: String,
+    index_start: u64,
+    range_end: u16,
+}
+
 #[axum_macros::debug_handler]
 async fn get_slice(my_params: Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
     let true_form_key = "0".to_owned() + &my_params.pk;

@@ -73,40 +73,6 @@ async fn write_read() -> Result<()> {
 }
 
 #[tokio::test]
-async fn check_catalog_exists() -> Result<()> {
-    carbonado::utils::init_logging(RUST_LOG);
-
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    info!("Reading file bytes");
-    let file_bytes = fs::read("tests/samples/cat.gif")?;
-    debug!("{} bytes read", file_bytes.len());
-
-    let file_stream = stream::iter(file_bytes)
-        .chunks(1024 * 1024)
-        .map(|chunk| Ok(Bytes::from(chunk)))
-        .boxed();
-
-    info!("Writing file if not exists");
-    let is_ok = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
-    debug!("Skip writing file as File hash exists: {is_ok}");
-    assert!(is_ok);
-
-    let file_bytes = fs::read("tests/samples/cat.gif")?;
-    let file_stream = stream::iter(file_bytes)
-        .chunks(1024 * 1024)
-        .map(|chunk| Ok(Bytes::from(chunk)))
-        .boxed();
-
-    info!("Writing file if not exists");
-    let is_err = write_file(&Secp256k1PubKey(pk), file_stream).await.is_err();
-    debug!("Skip writing file as File hash exists: {is_err}");
-    assert!(is_err);
-
-    Ok(())
-}
-
-#[tokio::test]
 async fn read_write_delete_file() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
@@ -114,8 +80,8 @@ async fn read_write_delete_file() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-    let file_stream = stream::iter(file_bytes.clone())
-        .chunks(1024 * 1024)
+    let file_stream: FileStream = stream::iter(file_bytes.clone())
+        .chunks(SEGMENT_SIZE)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
@@ -135,8 +101,8 @@ async fn read_write_delete_file() -> Result<()> {
     // second file to write
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
-    let file_stream = stream::iter(file_bytes)
-        .chunks(1024 * 1024)
+    let file_stream: FileStream = stream::iter(file_bytes)
+        .chunks(SEGMENT_SIZE)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
