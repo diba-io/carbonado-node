@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use std::{
     fs::{self, OpenOptions},
     io::{self, Read, Seek, Write},
@@ -80,7 +78,7 @@ pub async fn write_file<'a>(pk: &Secp256k1PubKey, file_stream: FileStream) -> Re
     }
 
     trace!("Append each hash to its catalog");
-    write_catalog(&file_hash, segment_hashes)?;
+    write_catalog(&file_hash, &segment_hashes)?;
 
     debug!("Finished write_file");
     Ok(file_hash)
@@ -134,7 +132,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
     Ok(BaoHash(bao_hash.to_owned()))
 }
 
-pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: Vec<BaoHash>) -> Result<()> {
+pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Result<()> {
     debug!("Write catalog");
     let contents: Vec<u8> = segment_hashes
         .iter()
@@ -257,6 +255,7 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
     Ok(bao_hashes)
 }
 
+#[allow(unused_variables)]
 pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
     let pk_bytes = pk.to_bytes();
     let (x_only_pk, _) = pk.into_inner().x_only_public_key();
@@ -278,6 +277,7 @@ pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
     trace!(">>> remove_Segment_contents");
     for entry in fs::read_dir(path)? {
@@ -287,6 +287,7 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     for entry in fs::read_dir(path)? {
         trace!("Delete CATALOG File at {:?}", entry);
