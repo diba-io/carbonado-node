@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr, sync::RwLock};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::Result;
 use axum::{
@@ -59,15 +59,6 @@ async fn post_file(
     Ok((StatusCode::OK, hash.to_hex().to_string()))
 }
 
-/* TODO: This seems unnecessary, and could introduce concurrency and security issues
-#[axum_macros::debug_handler]
-async fn get_last_hash(Path(_pk): Path<String>) -> Result<impl IntoResponse, AppError> {
-    let hash1 = LOCK.read().unwrap();
-    let string_hash1 = hash1.clone();
-
-    Ok((StatusCode::OK, string_hash1))
-} */
-
 #[axum_macros::debug_handler]
 async fn get_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
@@ -101,7 +92,6 @@ pub async fn start() -> Result<()> {
     let app = Router::new()
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
-        // .route("/last_hash/:pk", get(get_last_hash))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         // .route("/slice/", get(get_slice))
         .route("/key/:pk", get(key))
