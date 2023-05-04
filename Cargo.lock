@@ -346,6 +346,7 @@ dependencies = [
  "axum-macros",
  "bao",
  "blake3",
+ "bytes",
  "carbonado",
  "chrono",
  "clap",
