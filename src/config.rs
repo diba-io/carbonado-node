@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 use directories::BaseDirs;
 use log::{info, trace};
 use once_cell::sync::Lazy;
-use secp256k1::{Secp256k1, SecretKey};
+use secp256k1::{ecdh::SharedSecret, PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
 
 use crate::prelude::{CATALOG_DIR, SEGMENT_DIR};
@@ -111,10 +111,8 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
     }
 
     for vol in volumes.iter() {
-        let segment_dir = vol.path.join(SEGMENT_DIR);
-        let catalog_dir = vol.path.join(CATALOG_DIR);
-        create_dir_all(&segment_dir)?;
-        create_dir_all(&catalog_dir)?;
+        create_dir_all(vol.path.join(SEGMENT_DIR))?;
+        create_dir_all(vol.path.join(CATALOG_DIR))?;
     }
 
     let capacity = sys_cfg.capacity.unwrap_or(1_000);
@@ -143,3 +141,9 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
 
 pub static SYS_CFG: Lazy<SysCfg> =
     Lazy::new(|| init_sys_cfg().expect("Failed to initialize config"));
+
+pub fn node_shared_secret(pk: &PublicKey) -> Result<SharedSecret> {
+    let ss = SharedSecret::new(pk, &SYS_CFG.private_key);
+
+    Ok(ss)
+}
