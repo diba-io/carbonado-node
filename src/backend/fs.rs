@@ -336,6 +336,7 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     for entry in fs::read_dir(path)? {
         trace!("Delete CATALOG File at {:?}", entry);
