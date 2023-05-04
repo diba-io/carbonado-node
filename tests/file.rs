@@ -5,6 +5,7 @@ use axum::body::Bytes;
 use carbonado_node::{
     backend::fs::{delete_file, write_file},
     config::SYS_CFG,
+    prelude::{CATALOG_DIR, SEGMENT_DIR},
     structs::Secp256k1PubKey,
 };
 use futures_util::{stream, StreamExt};
@@ -112,7 +113,8 @@ async fn read_write_delete_file() -> Result<()> {
 
     // Check number of files
     for vol in &SYS_CFG.volumes {
-        let cat_file = &vol.path.join("/tmp/carbonado-0/catalogs");
+        //let path = volume.path.join(CATALOG_DIR).join(file_hash.to_string());
+        let cat_file = &vol.path.join(CATALOG_DIR);
         let paths = fs::read_dir(cat_file).unwrap();
         for path in paths {
             let mut w = COUNT_CAT.write().unwrap();
@@ -131,7 +133,9 @@ async fn read_write_delete_file() -> Result<()> {
 
     // Check number of files
     for vol in &SYS_CFG.volumes {
-        let seg_file = &vol.path.join("/tmp/carbonado-0/segments");
+        //let seg_file = &vol.path.join("/tmp/carbonado-0/segments");
+        let seg_file = &vol.path.join(SEGMENT_DIR);
+
         let paths = fs::read_dir(seg_file).unwrap();
         for path in paths {
             let mut w = COUNT_SEG.write().unwrap();

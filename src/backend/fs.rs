@@ -138,7 +138,7 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: Vec<BaoHash>) -> Re
             trace!("Get catalogs directory path");
             let path = volume.path.join(CATALOG_DIR).join(file_hash.to_string());
 
-            trace!("Open catalog file at {}", path.to_string_lossy());
+            trace!(">>>>>> Open catalog file at {}", path.to_string_lossy());
 
             let mut file = OpenOptions::new()
                 .create_new(true)

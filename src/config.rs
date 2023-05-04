@@ -36,7 +36,7 @@ fn init_env_cfg() -> Result<EnvCfg> {
 
 pub static ENV_CFG: Lazy<EnvCfg> = Lazy::new(|| init_env_cfg().expect("Initialize env config"));
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Volume {
     pub path: PathBuf, // Path to mounted volume
 }
@@ -106,6 +106,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         let volume: Volume = orig_volumes.get(i).map(|v| v.to_owned()).unwrap_or(Volume {
             path: base_dir.join("Carbonado").join(format!("Volume_{i}")),
         });
+        info!("CHECK ::: Volume:: {:?}", volume.to_owned());
 
         volumes.push(volume.to_owned());
     }
