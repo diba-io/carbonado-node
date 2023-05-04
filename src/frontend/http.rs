@@ -13,12 +13,13 @@ use futures_util::{
     stream::{self},
     StreamExt,
 };
-use log::info;
+use log::{info, trace};
+use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
 
 use crate::{
     backend::fs::{delete_file, read_file, write_file, FileStream},
-    config::SYS_CFG,
+    config::{node_shared_secret, SYS_CFG},
     prelude::*,
 };
 
@@ -39,12 +40,15 @@ async fn post_file(
 
                     if remainder.len() >= SEGMENT_SIZE {
                         let segment = remainder.split_to(SEGMENT_SIZE);
+                        trace!("Stream 1MB segment");
                         return Ok(Some((segment.freeze(), (body_stream, remainder))));
                     }
                 } else {
+                    trace!("No more segments in Body Stream");
                     return Ok(None);
                 }
             }
+            trace!("Unexpected while short-circuit");
             Ok(None)
         },
     )
@@ -75,11 +79,21 @@ async fn remove_file(
     Ok((StatusCode::OK, blake3_hash))
 }
 
+async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
+    let pk = PublicKey::from_str(&pk)?;
+
+    let ss = node_shared_secret(&pk)?;
+    let ss = ss.display_secret();
+
+    Ok(ss.to_string())
+}
+
 pub async fn start() -> Result<()> {
     let app = Router::new()
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
+        .route("/key/:pk", get(key))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
