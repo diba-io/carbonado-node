@@ -9,11 +9,8 @@ use axum::{
     Router,
 };
 use bytes::BytesMut;
-use futures_util::{
-    stream::{self},
-    StreamExt,
-};
-use log::{info, trace};
+use futures_util::{stream, StreamExt};
+use log::{debug, info, trace};
 use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
 
@@ -28,6 +25,7 @@ async fn post_file(
     Path(pk): Path<String>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, AppError> {
+    debug!("post_file called with {pk}");
     let pk = &Secp256k1PubKey::try_from(pk.as_str())?;
 
     let file_stream: FileStream = stream::try_unfold(

@@ -24,14 +24,14 @@ async fn write_read() -> Result<()> {
         PublicKey::from_str("032a1c42e4b520d48e7d2661f9af97f8ae646e13a3c0d87f8328da05807a48642d")?;
     let ss = node_shared_secret(&pk)?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
-    debug!(" >>>> Public Key Generated :: {} :: {}", pk, write_pk);
+    debug!("Public keys - supplied pk: {pk}, write pk: {write_pk}");
 
-    info!("Write Delete:: Reading file bytes");
+    info!("Reading file bytes");
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     let file_len = file_bytes.len();
     debug!("{} Write Delete:: bytes read", file_len);
 
-    info!("Write Delete:: Writing file if not exists in order to test delete");
+    info!("Writing file");
 
     let (x_only, _) = write_pk.x_only_public_key();
     let orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
@@ -42,6 +42,8 @@ async fn write_read() -> Result<()> {
         .boxed();
 
     let blake3_hash = write_file(&Secp256k1PubKey(write_pk), file_stream).await?;
+
+    info!("Reading file");
 
     let decoded_file = read_file(&Secp256k1PubKey(pk), &blake3_hash).await?;
 
