@@ -1,54 +1,68 @@
-#![allow(unused_variables)]
-
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
+    pin::Pin,
+    sync::Arc,
 };
 
 use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
-use futures_util::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 use log::{debug, trace};
-use rayon::prelude::*;
-use secp256k1::{ecdh::SharedSecret, PublicKey, SecretKey};
+use par_stream::{ParStreamExt, TryParStreamExt};
+use rayon::{
+    prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    slice::ParallelSlice,
+};
+use secp256k1::{PublicKey, SecretKey};
+use tokio::sync::Mutex;
 
-use crate::{config::SYS_CFG, prelude::*};
+use crate::{
+    config::{node_shared_secret, SYS_CFG},
+    prelude::*,
+};
 
-pub type FileStream<'a> = BoxStream<'a, Result<Bytes>>;
+pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
-pub async fn write_file<'a>(
-    pk: &Secp256k1PubKey,
-    file_stream: FileStream<'a>,
-) -> Result<Blake3Hash> {
+pub async fn write_file<'a>(pk: &Secp256k1PubKey, file_stream: FileStream) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
-    let sk = SYS_CFG.private_key;
-    let ss = SharedSecret::new(&pk.into_inner(), &sk).secret_bytes();
+    let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
 
     let pk_bytes = write_pk.serialize();
     let (x_only_pk, _) = write_pk.x_only_public_key();
 
     trace!("Initialize Blake3 keyed hasher");
-    let mut file_hasher = blake3::Hasher::new_keyed(&x_only_pk.serialize());
+    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(
+        &x_only_pk.serialize(),
+    )));
 
     trace!("Iterate through file body stream");
-    let segment_hashes = file_stream
-        .map(|segment: Result<Bytes>| {
-            let segment = segment?;
-            file_hasher.update(&segment);
-            let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
-            let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
+    let thread_file_hasher = file_hasher.clone();
 
-            Ok::<BaoHash, Error>(segment_hash)
+    let segment_hashes: Vec<BaoHash> = file_stream
+        .try_par_then(None, move |segment: Bytes| {
+            trace!("Process segment");
+            let thread_file_hasher = thread_file_hasher.clone();
+            async move {
+                thread_file_hasher.lock().await.update(&segment);
+                trace!("Encoding segment");
+                let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
+                trace!("Writing segment");
+                let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
+                trace!("Segment hash: {segment_hash}");
+
+                Ok::<BaoHash, Error>(segment_hash)
+            }
         })
-        .try_collect::<Vec<BaoHash>>()
+        .try_collect()
         .await?;
 
-    let file_hash: Blake3Hash = Blake3Hash(file_hasher.finalize());
+    let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
 
-    trace!("Check if segment already exists");
+    trace!("Check if catalog already exists");
     let path = SYS_CFG
         .volumes
         .get(0)
@@ -57,13 +71,13 @@ pub async fn write_file<'a>(
         .join(CATALOG_DIR)
         .join(file_hash.to_string());
 
-    trace!("Read catalog at {path:?}");
+    trace!("Check catalog at {path:?}");
 
     if path.exists() {
         return Err(anyhow!("This file already exists for this public key."));
     }
 
-    trace!("Append each hash to its catalog, plus its format");
+    trace!("Append each hash to its catalog");
     write_catalog(&file_hash, &segment_hashes)?;
 
     debug!("Finished write_file");
@@ -81,11 +95,6 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
         .par_chunks_exact(encoded_chunk_size)
         .enumerate()
         .map(|(chunk_index, encoded_segment_chunk)| {
-            let volume = SYS_CFG
-                .volumes
-                .get(chunk_index)
-                .expect("Get one of eight volumes");
-
             let format = Format::try_from(NODE_FORMAT)?;
             let header = Header::new(
                 sk,
@@ -106,7 +115,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
 
             let path = volume.path.join(SEGMENT_DIR).join(file_name);
 
-            trace!("Write segment at {}", path.to_string_lossy());
+            trace!("Write segment at {path:?}");
             let mut file = OpenOptions::new()
                 .create_new(true)
                 .write(true)
@@ -137,7 +146,7 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Resu
             trace!("Get catalogs directory path");
             let path = volume.path.join(CATALOG_DIR).join(file_hash.to_string());
 
-            trace!("Open catalog file at {}", path.to_string_lossy());
+            trace!("Open catalog file at {path:?}");
             let mut file = OpenOptions::new()
                 .create_new(true)
                 .write(true)
@@ -155,22 +164,19 @@ pub fn write_catalog(file_hash: &Blake3Hash, segment_hashes: &[BaoHash]) -> Resu
     Ok(())
 }
 
-pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<Vec<u8>> {
+pub fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<FileStream> {
     debug!("Read file by hash: {}", blake3_hash.to_string());
 
     trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
     let catalog_file = read_catalog(blake3_hash)?;
 
     trace!("Create a shared secret using ECDH");
-    let sk = SYS_CFG.private_key;
-    let ss = SharedSecret::new(&pk.into_inner(), &sk);
-    let ss_bytes = ss.secret_bytes();
+    let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
 
     trace!("For each hash, read each chunk into a segment, then decode that segment");
     trace!("Segment files");
-    let file_bytes = catalog_file
-        .par_iter()
-        .flat_map(|segment_hash| {
+    let file_bytes: FileStream = stream::iter(catalog_file)
+        .par_then(None, move |segment_hash| async move {
             let chunk_path = SYS_CFG
                 .volumes
                 .get(0)
@@ -179,39 +185,48 @@ pub async fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result
                 .join(SEGMENT_DIR)
                 .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
-            let chunk_file = OpenOptions::new().read(true).open(chunk_path).unwrap();
-            let header = Header::try_from(chunk_file).unwrap();
+            let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
+            let header = Header::try_from(&chunk_file)?;
 
-            let segment = SYS_CFG
-                .volumes
-                .par_iter()
-                .flat_map(|volume| {
-                    let path = volume
-                        .path
-                        .join(SEGMENT_DIR)
-                        .join(format!("{segment_hash}.c{NODE_FORMAT}"));
+            let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
+                SYS_CFG
+                    .volumes
+                    .par_iter()
+                    .flat_map(|volume| {
+                        let path = volume
+                            .path
+                            .join(SEGMENT_DIR)
+                            .join(format!("{segment_hash}.c{NODE_FORMAT}"));
 
-                    let mut file = OpenOptions::new().read(true).open(path).unwrap();
+                        let mut file = OpenOptions::new().read(true).open(path).unwrap();
 
-                    let mut bytes = vec![];
-                    file.read_to_end(&mut bytes).unwrap();
+                        let mut bytes = vec![];
+                        file.read_to_end(&mut bytes).unwrap();
 
-                    let (_header, chunk) = bytes.split_at(Header::len());
+                        let (_header, chunk) = bytes.split_at(Header::len());
 
-                    chunk.to_owned()
-                })
-                .collect::<Vec<u8>>();
+                        chunk.to_owned()
+                    })
+                    .collect()
+            } else {
+                let mut bytes = vec![];
+                chunk_file.rewind()?;
+                chunk_file.read_to_end(&mut bytes)?;
+                let (_header, chunk) = bytes.split_at(Header::len());
+                chunk.to_vec()
+            };
 
-            carbonado::decode(
-                &ss_bytes,
+            let bytes = carbonado::decode(
+                &ss,
                 &segment_hash.to_bytes(),
                 &segment,
                 header.padding_len,
                 NODE_FORMAT,
-            )
-            .unwrap()
+            )?;
+
+            Ok(Bytes::from(bytes))
         })
-        .collect::<Vec<u8>>();
+        .boxed();
 
     debug!("Finish read_file");
     Ok(file_bytes)
@@ -226,7 +241,7 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
         .join(CATALOG_DIR)
         .join(file_hash.to_string());
 
-    trace!("Read catalog at {}", path.to_string_lossy());
+    trace!("Read catalog at {path:?}");
     let mut file = OpenOptions::new().read(true).open(path)?;
 
     let mut bytes = vec![];
@@ -240,6 +255,7 @@ pub fn read_catalog(file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
     Ok(bao_hashes)
 }
 
+#[allow(unused_variables)]
 pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
     let pk_bytes = pk.to_bytes();
     let (x_only_pk, _) = pk.into_inner().x_only_public_key();
@@ -261,6 +277,7 @@ pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
     trace!(">>> remove_Segment_contents");
     for entry in fs::read_dir(path)? {
@@ -270,6 +287,7 @@ fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     for entry in fs::read_dir(path)? {
         trace!("Delete CATALOG File at {:?}", entry);
