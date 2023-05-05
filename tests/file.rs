@@ -1,4 +1,4 @@
-use std::{fs, sync::RwLock};
+use std::fs;
 
 use anyhow::Result;
 use axum::body::Bytes;
@@ -65,7 +65,7 @@ async fn write_read() -> Result<()> {
 
     // Delete file with hash across all volumes in config
     let new_file_bytes = delete_file(&blake3_hash.to_string()).await.is_ok();
-    debug!("Deleted file:: {:?}", new_file_bytes);
+    debug!("Write/Read Deleted file:: {:?}", new_file_bytes);
 
     info!("Write/Read test finished successfully!");
 
@@ -102,11 +102,11 @@ async fn read_write_delete_file() -> Result<()> {
         let seg_file = &vol.path.join(CATALOG_DIR);
 
         let paths = fs::read_dir(seg_file).unwrap();
-        let mut counter = -1; // account for .DS_store in dir .../segments/.DS_Store
+        let mut counter = -1;
         for path in paths {
             counter += 1;
             debug!(
-                "Segment count: {:?} :: path: {}",
+                "Catalog count: {:?} :: path: {}",
                 counter,
                 path.unwrap().path().display()
             )
