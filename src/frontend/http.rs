@@ -86,7 +86,7 @@ async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
 
 pub async fn start() -> Result<()> {
     let app = Router::new()
-        .route("/remove/:pk/:blake3_hash", delete(remove_file))
+        .route("/remove/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         // .route("/slice/", get(get_slice))

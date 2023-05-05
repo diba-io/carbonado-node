@@ -1,11 +1,11 @@
-use std::fs;
+use std::{fs, sync::RwLock};
 
 use anyhow::Result;
 use axum::body::Bytes;
 use carbonado_node::{
-    backend::fs::{read_file, write_file, FileStream},
-    config::node_shared_secret,
-    prelude::SEGMENT_SIZE,
+    backend::fs::{delete_file, read_file, write_file, FileStream},
+    config::{node_shared_secret, SYS_CFG},
+    prelude::{CATALOG_DIR, SEGMENT_DIR, SEGMENT_SIZE},
     structs::Secp256k1PubKey,
 };
 use futures_util::{stream, StreamExt};
@@ -63,11 +63,11 @@ async fn write_read() -> Result<()> {
         "Original keyed blake3 hash and streamed hash match",
     );
 
-    // TODO: This is not how you delete files
-    // let new_file_bytes = delete_file(Secp256k1PubKey(write_pk), &file_bytes).is_err();
-    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+    // Delete file with hash across all volumes in config
+    let new_file_bytes = delete_file(&blake3_hash.to_string()).await.is_ok();
+    debug!("Deleted file:: {:?}", new_file_bytes);
 
-    info!("Write/Delete test finished successfully!");
+    info!("Write/Read test finished successfully!");
 
     Ok(())
 }
@@ -76,53 +76,73 @@ async fn write_read() -> Result<()> {
 async fn read_write_delete_file() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
-    info!("Write Delete:: Reading file bytes");
+    // write file to test delete
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-    let file_stream: FileStream = stream::iter(file_bytes.clone())
-        .chunks(SEGMENT_SIZE)
-        .map(|chunk| Ok(Bytes::from(chunk)))
-        .boxed();
-
-    // first file to write
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
-
-    if file_did_write {
-        info!(
-            "Write File Group One to Delete File as blake3_hash:: {} ",
-            file_did_write.to_string()
-        );
-    }
-
-    // second file to write
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    let file_stream: FileStream = stream::iter(file_bytes)
-        .chunks(SEGMENT_SIZE)
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+    let final_blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
 
-    if blake3_hash {
-        info!(
-            "Write File in Group Two to Delete File as blake3_hash:: {} ",
-            blake3_hash.to_string()
+    info!(
+        "File To Delete as blake3_hash:: {} ",
+        final_blake3_hash.to_string()
+    );
+
+    // Check number of catalog files
+    let mut current_volume = -1; // start for volume 0
+    for vol in &SYS_CFG.volumes {
+        current_volume += 1;
+        let seg_file = &vol.path.join(CATALOG_DIR);
+
+        let paths = fs::read_dir(seg_file).unwrap();
+        let mut counter = -1; // account for .DS_store in dir .../segments/.DS_Store
+        for path in paths {
+            counter += 1;
+            debug!(
+                "Segment count: {:?} :: path: {}",
+                counter,
+                path.unwrap().path().display()
+            )
+        }
+        debug!(
+            "For Volume: {}, total catalogs deleted: {:?}",
+            current_volume, counter
         );
     }
 
-    // TODO: This is not how you delete files
-    // let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
-    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
+    // Check number of segment files
+    let mut current_volume = -1; // start for volume 0
+    for vol in &SYS_CFG.volumes {
+        current_volume += 1;
+        let seg_file = &vol.path.join(SEGMENT_DIR);
 
-    // TODO: Check number of files
+        let paths = fs::read_dir(seg_file).unwrap();
+        let mut counter = -1; // account for .DS_store in dir .../segments/.DS_Store
+        for path in paths {
+            counter += 1;
+            debug!(
+                "Segment count: {:?} :: path: {}",
+                counter,
+                path.unwrap().path().display()
+            )
+        }
+        debug!(
+            "For Volume: {}, total segments deleted: {:?}",
+            current_volume, counter
+        );
+    }
 
-    debug!(" >>>> Public Key Generated :: {:?} :: {}", _sk, pk);
+    // Delete Files for blake3_hash
+    let new_file_bytes = delete_file(&final_blake3_hash.to_string()).await.is_ok();
+    debug!("Deleted files success:: {:?}", new_file_bytes);
+
     info!("Write/Delete test finished successfully!");
 
     Ok(())
