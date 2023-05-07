@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use directories::BaseDirs;
-use log::{info, trace};
+use log::{debug, info, trace};
 use once_cell::sync::Lazy;
 use secp256k1::{ecdh::SharedSecret, PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
@@ -110,11 +110,6 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         volumes.push(volume.to_owned());
     }
 
-    for vol in volumes.iter() {
-        create_dir_all(vol.path.join(SEGMENT_DIR))?;
-        create_dir_all(vol.path.join(CATALOG_DIR))?;
-    }
-
     let capacity = sys_cfg.capacity.unwrap_or(1_000);
 
     let config = SysCfg {
@@ -146,4 +141,49 @@ pub fn node_shared_secret(pk: &PublicKey) -> Result<SharedSecret> {
     let ss = SharedSecret::new(pk, &SYS_CFG.private_key);
 
     Ok(ss)
+}
+
+pub fn file_path(
+    volume_index: usize,
+    write_pk_str: &str,
+    dir_type: &str,
+    file_name: &str,
+) -> Result<PathBuf> {
+    let path = SYS_CFG
+        .volumes
+        .get(volume_index)
+        .ok_or_else(|| anyhow!("Volume {volume_index} not present"))?
+        .path
+        .join(write_pk_str)
+        .join(dir_type)
+        .join(file_name);
+
+    debug!("File path created: {path:?}");
+
+    Ok(path)
+}
+
+pub async fn ensure_pk_dirs_exist(write_pk_str: &str) -> Result<()> {
+    use futures_util::{stream, TryStreamExt};
+    use par_stream::ParStreamExt;
+    use tokio::fs::create_dir_all;
+
+    let write_pk_str = write_pk_str.to_owned();
+
+    stream::iter(SYS_CFG.volumes.clone())
+        .par_then(None, move |volume| {
+            let write_pk_str = write_pk_str.clone();
+            let path = volume.path.join(write_pk_str);
+
+            async move {
+                create_dir_all(path.join(CATALOG_DIR)).await?;
+                create_dir_all(path.join(SEGMENT_DIR)).await?;
+
+                Ok::<(), anyhow::Error>(())
+            }
+        })
+        .try_collect()
+        .await?;
+
+    Ok(())
 }
