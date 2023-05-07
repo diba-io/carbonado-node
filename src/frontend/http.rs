@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, str::FromStr};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use axum::{
     body::StreamBody,
     extract::{BodyStream, Path},
@@ -12,6 +12,7 @@ use axum::{
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt};
 use log::{debug, info, trace};
+use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
 use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
 
@@ -72,6 +73,13 @@ async fn post_file_named(
 ) -> Result<impl IntoResponse, AppError> {
     debug!("post_file called with {pk}");
 
+    let reencoded =
+        utf8_percent_encode(&percent_decode_str(&name).decode_utf8()?, FORM).to_string();
+
+    if name != reencoded {
+        return Err(AppError(StatusCode::BAD_REQUEST, anyhow!("Provided file name contains characters that have not been encoded. It should be: {reencoded}")));
+    }
+
     let hash = write_file_handler(&pk, body, Some(name)).await?;
 
     Ok((StatusCode::OK, hash))
@@ -130,16 +138,12 @@ pub async fn start() -> Result<()> {
 
 // https://github.com/tokio-rs/axum/blob/fef95bf37a138cdf94985e17f27fd36481525171/examples/anyhow-error-response/src/main.rs
 // Make our own error that wraps `anyhow::Error`.
-struct AppError(anyhow::Error);
+struct AppError(StatusCode, anyhow::Error);
 
 // Tell axum how to convert `AppError` into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Something went wrong: {}", self.0),
-        )
-            .into_response()
+        (self.0, format!("Something went wrong: {}", self.1)).into_response()
     }
 }
 
@@ -150,6 +154,6 @@ where
     E: Into<anyhow::Error>,
 {
     fn from(err: E) -> Self {
-        Self(err.into())
+        Self(StatusCode::INTERNAL_SERVER_ERROR, err.into())
     }
 }
