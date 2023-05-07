@@ -21,13 +21,8 @@ use crate::{
     prelude::*,
 };
 
-#[axum_macros::debug_handler]
-async fn post_file(
-    Path(pk): Path<String>,
-    body: BodyStream,
-) -> Result<impl IntoResponse, AppError> {
-    debug!("post_file called with {pk}");
-    let pk = &Secp256k1PubKey::try_from(pk.as_str())?;
+async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
+    let pk = &Secp256k1PubKey::try_from(pk)?;
 
     let file_stream: FileStream = stream::try_unfold(
         (body, BytesMut::with_capacity(SEGMENT_SIZE * 2)),
@@ -53,9 +48,33 @@ async fn post_file(
     )
     .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream).await?;
+    let Blake3Hash(hash) = write_file(pk, file_stream, name).await?;
 
-    Ok((StatusCode::OK, hash.to_hex().to_string()))
+    Ok(hash.to_hex().to_string())
+}
+
+#[axum_macros::debug_handler]
+async fn post_file(
+    Path(pk): Path<String>,
+    body: BodyStream,
+) -> Result<impl IntoResponse, AppError> {
+    debug!("post_file called with {pk}");
+
+    let hash = write_file_handler(&pk, body, None).await?;
+
+    Ok((StatusCode::OK, hash))
+}
+
+#[axum_macros::debug_handler]
+async fn post_file_named(
+    Path((pk, name)): Path<(String, String)>,
+    body: BodyStream,
+) -> Result<impl IntoResponse, AppError> {
+    debug!("post_file called with {pk}");
+
+    let hash = write_file_handler(&pk, body, Some(name)).await?;
+
+    Ok((StatusCode::OK, hash))
 }
 
 #[axum_macros::debug_handler]
@@ -91,6 +110,7 @@ pub async fn start() -> Result<()> {
     let app = Router::new()
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
+        .route("/store/:pk/:name", post(post_file_named))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         .route("/key/:pk", get(key))
         // .route("/catalog/:blake3_hash", get(get_catalog))

@@ -43,7 +43,7 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None).await?;
 
     info!("Reading file");
 
@@ -93,7 +93,9 @@ async fn read_write_delete_file() -> Result<()> {
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream, None)
+        .await
+        .is_ok();
 
     if file_did_write {
         info!(
@@ -111,7 +113,9 @@ async fn read_write_delete_file() -> Result<()> {
         .boxed();
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None)
+        .await
+        .is_ok();
 
     if blake3_hash {
         info!(
