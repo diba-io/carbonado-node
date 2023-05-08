@@ -277,26 +277,6 @@ pub fn read_catalog(write_pk_str: &str, file_hash: &Blake3Hash) -> Result<Vec<Ba
     Ok(bao_hashes)
 }
 
-pub async fn new_get_slice(pk: &Secp256k1PubKey, hash: &str) -> Result<()> {
-    let blake3_hash = &Blake3Hash(blake3::Hash::from_str(hash)?);
-
-    let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
-    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
-    let write_pk_str = write_pk.to_string();
-    // trace!("WRITE_PK_STR >>>>>>>>>>: {}", write_pk_str);
-    let catalog = read_catalog(&write_pk_str, blake3_hash)?;
-    trace!("CATALOG LENGTH: {}", catalog.len());
-
-    // for vol in &SYS_CFG.volumes {
-    //     trace!("CATALOG PATH INSIIDE LOOP: {:?}", vol.path);
-
-    //     let test_path = vol.path.join(&write_pk_str);
-    //     let is_removed = fs::remove_dir_all(test_path).is_ok();
-    //     trace!("ROOT LEVEL VOLUME_{:?}  {:?}: ", vol.path, is_removed);
-    // }
-    Ok(())
-}
-
 pub async fn delete_file(pk: &Secp256k1PubKey) -> Result<()> {
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
