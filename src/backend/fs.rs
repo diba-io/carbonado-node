@@ -276,6 +276,40 @@ pub fn read_catalog(write_pk_str: &str, file_hash: &Blake3Hash) -> Result<Vec<Ba
     Ok(bao_hashes)
 }
 
+pub fn read_slice(
+    pk: &Secp256k1PubKey,
+    file_hash: &Blake3Hash,
+    slice_start: usize,
+    slice_len: usize,
+) -> Result<Vec<BaoHash>> {
+    trace!("Create a shared secret using ECDH");
+    let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
+    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
+    let write_pk_str = write_pk.to_string();
+
+    let path = file_path(0, &write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
+
+    trace!("Read catalog at {path:?}");
+    let mut catalog_file = OpenOptions::new().read(true).open(path)?;
+
+    let mut bytes = vec![];
+    catalog_file.read_to_end(&mut bytes)?;
+
+    trace!("Read catalog at {:?}", catalog_file);
+    trace!(" )))) Read catalog BYTES len()  {:?}", bytes.len());
+
+    // GET RANGE ex: &bytes[1..4]);
+    let slice_end = slice_start + slice_len;
+    trace!(" {:?}", &bytes[slice_start..slice_end]);
+
+    let bao_hashes = bytes
+        .chunks_exact(bao::HASH_SIZE)
+        .map(BaoHash::try_from)
+        .collect::<Result<Vec<BaoHash>>>()?;
+
+    Ok(bytes)
+}
+
 pub async fn delete_file(pk: &Secp256k1PubKey) -> Result<()> {
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);

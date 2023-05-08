@@ -4,7 +4,7 @@ use anyhow::Result;
 use axum::body::Bytes;
 use bytes::BytesMut;
 use carbonado_node::{
-    backend::fs::{delete_file, read_file, write_file, FileStream},
+    backend::fs::{delete_file, read_file, read_slice, write_file, FileStream},
     config::{node_shared_secret, SYS_CFG},
     prelude::{CATALOG_DIR, SEGMENT_DIR, SEGMENT_SIZE},
     structs::Secp256k1PubKey,
@@ -152,6 +152,72 @@ async fn read_write_delete_file() -> Result<()> {
     debug!("Deleted files success:: {:?}", new_file_bytes);
 
     info!("Write/Delete test finished successfully!");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn read_slices() -> Result<()> {
+    carbonado::utils::init_logging(RUST_LOG);
+
+    // write file to test delete
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+    let ss = node_shared_secret(&pk)?.secret_bytes();
+    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
+    debug!("Public keys - supplied pk: {pk}, write pk: {write_pk}");
+
+    let file_bytes = fs::read("tests/samples/cat.gif")?;
+    let file_len = file_bytes.len();
+    debug!("{} Write Delete:: bytes read", file_len);
+
+    info!("Writing file");
+
+    let (x_only, _) = write_pk.x_only_public_key();
+    let orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
+
+    let file_stream: FileStream = stream::iter(file_bytes)
+        .chunks(SEGMENT_SIZE)
+        .map(|chunk| Ok(Bytes::from(chunk)))
+        .boxed();
+
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
+
+    info!("Reading file");
+
+    // let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
+    //     .try_fold(BytesMut::new(), |mut acc, chunk| async move {
+    //         acc.extend(chunk);
+    //         Ok(acc)
+    //     })
+    //     .await?
+    //     .to_vec();
+
+    let slice_start = 65536;
+    let slice_len = 8192;
+
+    let decoded_file: Vec<u8> =
+        read_slice(&Secp256k1PubKey(pk), &blake3_hash, slice_start, slice_len)?
+            .try_fold(BytesMut::new(), |mut acc, chunk| async move {
+                acc.extend(chunk);
+                Ok(acc)
+            })
+            .await?
+            .to_vec();
+
+    debug!("{} Write Delete:: bytes read", file_len);
+    assert_eq!(
+        decoded_file.len(),
+        file_len,
+        "Decoded file is same size as original"
+    );
+
+    assert_eq!(
+        orig_hash.to_hex().to_string(),
+        blake3_hash.to_string(),
+        "Original keyed blake3 hash and streamed hash match",
+    );
+
+    info!("Get/Slice test finished successfully!");
 
     Ok(())
 }
