@@ -2,7 +2,6 @@ use std::{
     fs::{self, OpenOptions},
     io::{Read, Seek, Write},
     pin::Pin,
-    str::FromStr,
     sync::Arc,
 };
 
