@@ -102,7 +102,7 @@ async fn read_write_delete_file() -> Result<()> {
         let seg_file = &vol.path.join(CATALOG_DIR);
 
         let paths = fs::read_dir(seg_file).unwrap();
-        let mut counter = -1;
+        let mut counter = 0;
         for path in paths {
             counter += 1;
             debug!(
@@ -124,7 +124,7 @@ async fn read_write_delete_file() -> Result<()> {
         let seg_file = &vol.path.join(SEGMENT_DIR);
 
         let paths = fs::read_dir(seg_file).unwrap();
-        let mut counter = -1; // account for .DS_store in dir .../segments/.DS_Store
+        let mut counter = 0;
         for path in paths {
             counter += 1;
             debug!(

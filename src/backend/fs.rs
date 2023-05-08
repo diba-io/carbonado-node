@@ -291,19 +291,11 @@ pub async fn read_slices(
         &encoded_input[slice_start as usize..][..slice_len as usize].len()
     );
 
-    // Like regular decoding, slice decoding will fail if the hash doesn't match.
-    // let mut bad_slice = slice.clone();
-    // debug!("BAD SLICE");
-    // let last_index = bad_slice.len() - 1;
-    // bad_slice[last_index] ^= 1;
-    // let mut decoder = bao::decode::SliceDecoder::new(&*bad_slice, &hash, slice_start, slice_len);
-    // let err = decoder.read_to_end(&mut Vec::new()).unwrap_err();
-    // assert_eq!(std::io::ErrorKind::InvalidData, err.kind());
-
     Ok(decoded)
 }
 
-pub async fn delete_file(hash: &String) -> Result<()> {
+// pub async fn delete_file(hash: &String) -> Result<()> {
+pub async fn delete_file(hash: &str) -> Result<()> {
     let blake3_hash = &Blake3Hash(blake3::Hash::from_str(hash)?);
     let catalog = read_catalog(blake3_hash)?;
     for vol in &SYS_CFG.volumes {
