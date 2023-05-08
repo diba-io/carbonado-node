@@ -70,9 +70,11 @@ async fn get_file(
 }
 
 #[axum_macros::debug_handler]
-async fn remove_file(Path(blake3_hash): Path<String>) -> Result<impl IntoResponse, AppError> {
-    delete_file(&blake3_hash).await?;
-    Ok((StatusCode::OK, blake3_hash))
+async fn remove_file(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
+    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
+    let del = delete_file(&pk).await.is_ok();
+
+    Ok((StatusCode::OK, del.to_string()))
 }
 
 async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {

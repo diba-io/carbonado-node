@@ -2,13 +2,14 @@ use std::fs;
 
 use anyhow::Result;
 use axum::body::Bytes;
+use bytes::BytesMut;
 use carbonado_node::{
     backend::fs::{delete_file, read_file, write_file, FileStream},
     config::{node_shared_secret, SYS_CFG},
     prelude::{CATALOG_DIR, SEGMENT_DIR, SEGMENT_SIZE},
     structs::Secp256k1PubKey,
 };
-use futures_util::{stream, StreamExt};
+use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
 use rand::thread_rng;
 use secp256k1::{generate_keypair, PublicKey, SecretKey};
@@ -47,9 +48,12 @@ async fn write_read() -> Result<()> {
     info!("Reading file");
 
     let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
-        .flat_map(|bytes| stream::iter(bytes.unwrap().to_vec()))
-        .collect()
-        .await;
+        .try_fold(BytesMut::new(), |mut acc, chunk| async move {
+            acc.extend(chunk);
+            Ok(acc)
+        })
+        .await?
+        .to_vec();
 
     assert_eq!(
         decoded_file.len(),
@@ -63,11 +67,11 @@ async fn write_read() -> Result<()> {
         "Original keyed blake3 hash and streamed hash match",
     );
 
-    // Delete file with hash across all volumes in config
-    let new_file_bytes = delete_file(&blake3_hash.to_string()).await.is_ok();
-    debug!("Write/Read Deleted file:: {:?}", new_file_bytes);
+    // TODO: This is not how you delete files
+    // let new_file_bytes = delete_file(Secp256k1PubKey(write_pk), &file_bytes).is_err();
+    // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
 
-    info!("Write/Read test finished successfully!");
+    info!("Write-read test finished successfully!");
 
     Ok(())
 }
@@ -95,11 +99,15 @@ async fn read_write_delete_file() -> Result<()> {
         final_blake3_hash.to_string()
     );
 
-    // Check number of catalog files
+    let ss = node_shared_secret(&Secp256k1PubKey(pk).into_inner())?.secret_bytes();
+    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
+    let write_pk_str = write_pk.to_string();
+
+    //  Check number of catalog files
     let mut current_volume = -1; // start for volume 0
     for vol in &SYS_CFG.volumes {
         current_volume += 1;
-        let seg_file = &vol.path.join(CATALOG_DIR);
+        let seg_file = &vol.path.join(&write_pk_str).join(CATALOG_DIR);
 
         let paths = fs::read_dir(seg_file).unwrap();
         let mut counter = 0;
@@ -112,16 +120,16 @@ async fn read_write_delete_file() -> Result<()> {
             )
         }
         debug!(
-            "For Volume: {}, total catalogs deleted: {:?}",
+            "CATALOGS Volume: {}, total deleted: {:?}",
             current_volume, counter
         );
     }
 
-    // Check number of segment files
+    // // Check number of segment files
     let mut current_volume = -1; // start for volume 0
     for vol in &SYS_CFG.volumes {
         current_volume += 1;
-        let seg_file = &vol.path.join(SEGMENT_DIR);
+        let seg_file = &vol.path.join(&write_pk_str).join(SEGMENT_DIR);
 
         let paths = fs::read_dir(seg_file).unwrap();
         let mut counter = 0;
@@ -134,13 +142,13 @@ async fn read_write_delete_file() -> Result<()> {
             )
         }
         debug!(
-            "For Volume: {}, total segments deleted: {:?}",
+            "SEGMENT Volume: {}, total deleted: {:?}",
             current_volume, counter
         );
     }
 
     // Delete Files for blake3_hash
-    let new_file_bytes = delete_file(&final_blake3_hash.to_string()).await.is_ok();
+    let new_file_bytes = delete_file(&Secp256k1PubKey(pk)).await.is_ok();
     debug!("Deleted files success:: {:?}", new_file_bytes);
 
     info!("Write/Delete test finished successfully!");
