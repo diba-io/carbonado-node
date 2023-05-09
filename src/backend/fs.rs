@@ -27,7 +27,11 @@ use crate::{
 
 pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
-pub async fn write_file<'a>(pk: &Secp256k1PubKey, file_stream: FileStream) -> Result<Blake3Hash> {
+pub async fn write_file<'a>(
+    pk: &Secp256k1PubKey,
+    file_stream: FileStream,
+    name: Option<String>,
+) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
@@ -76,7 +80,7 @@ pub async fn write_file<'a>(pk: &Secp256k1PubKey, file_stream: FileStream) -> Re
     }
 
     trace!("Append each hash to its catalog");
-    write_catalog(&write_pk_str, &file_hash, &segment_hashes).await?;
+    write_catalog(&write_pk_str, &file_hash, &segment_hashes, name).await?;
 
     debug!("Finished write_file");
     Ok(file_hash)
@@ -129,6 +133,7 @@ pub async fn write_catalog(
     write_pk_str: &str,
     file_hash: &Blake3Hash,
     segment_hashes: &[BaoHash],
+    name: Option<String>,
 ) -> Result<()> {
     debug!("Write catalog");
     let contents: Vec<u8> = segment_hashes
@@ -138,15 +143,16 @@ pub async fn write_catalog(
 
     let write_pk_str = write_pk_str.to_owned();
     let file_hash = file_hash.to_string();
+    let name = name.unwrap_or(file_hash);
 
     stream::iter(0..SYS_CFG.volumes.len())
         .par_map(None, move |volume_index| {
             let write_pk_str = write_pk_str.clone();
-            let file_hash = file_hash.clone();
+            let name = name.clone();
             let contents = contents.clone();
             move || {
                 trace!("Get catalogs directory path");
-                let path = file_path(volume_index, &write_pk_str, CATALOG_DIR, &file_hash)?;
+                let path = file_path(volume_index, &write_pk_str, CATALOG_DIR, &name)?;
 
                 trace!("Open catalog file at {path:?}");
                 let mut file = OpenOptions::new()
@@ -168,8 +174,8 @@ pub async fn write_catalog(
     Ok(())
 }
 
-pub fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<FileStream> {
-    debug!("Read file by hash: {}", blake3_hash.to_string());
+pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
+    debug!("Read file wiht lookup: {lookup}");
 
     trace!("Create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
@@ -177,7 +183,7 @@ pub fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<FileS
     let write_pk_str = write_pk.to_string();
 
     trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
-    let catalog_file = read_catalog(&write_pk_str, blake3_hash)?;
+    let catalog_file = read_catalog(&write_pk_str, lookup)?;
 
     trace!("For each hash, read each chunk into a segment, then decode that segment");
     let file_bytes: FileStream = stream::iter(catalog_file)
@@ -259,8 +265,8 @@ pub fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<FileS
     Ok(file_bytes)
 }
 
-pub fn read_catalog(write_pk_str: &str, file_hash: &Blake3Hash) -> Result<Vec<BaoHash>> {
-    let path = file_path(0, write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
+pub fn read_catalog(write_pk_str: &str, lookup: &Lookup) -> Result<Vec<BaoHash>> {
+    let path = file_path(0, write_pk_str, CATALOG_DIR, &lookup.to_string())?;
 
     trace!("Read catalog at {path:?}");
     let mut file = OpenOptions::new().read(true).open(path)?;

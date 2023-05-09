@@ -7,7 +7,7 @@ use carbonado_node::{
     backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
-    structs::Secp256k1PubKey,
+    structs::{Hash, Lookup, Secp256k1PubKey},
 };
 use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
@@ -43,17 +43,20 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None).await?;
 
     info!("Reading file");
 
-    let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
-        .try_fold(BytesMut::new(), |mut acc, chunk| async move {
-            acc.extend(chunk);
-            Ok(acc)
-        })
-        .await?
-        .to_vec();
+    let decoded_file: Vec<u8> = read_file(
+        &Secp256k1PubKey(pk),
+        &Lookup::Hash(Hash::Blake3(blake3_hash.clone())),
+    )?
+    .try_fold(BytesMut::new(), |mut acc, chunk| async move {
+        acc.extend(chunk);
+        Ok(acc)
+    })
+    .await?
+    .to_vec();
 
     assert_eq!(
         decoded_file.len(),
@@ -93,7 +96,9 @@ async fn read_write_delete_file() -> Result<()> {
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream, None)
+        .await
+        .is_ok();
 
     if file_did_write {
         info!(
@@ -111,7 +116,9 @@ async fn read_write_delete_file() -> Result<()> {
         .boxed();
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await.is_ok();
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None)
+        .await
+        .is_ok();
 
     if blake3_hash {
         info!(
