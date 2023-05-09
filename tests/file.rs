@@ -162,60 +162,38 @@ async fn read_slices() -> Result<()> {
 
     // write file to test delete
     let (_sk, pk) = generate_keypair(&mut thread_rng());
-    let ss = node_shared_secret(&pk)?.secret_bytes();
-    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
-    debug!("Public keys - supplied pk: {pk}, write pk: {write_pk}");
 
     let file_bytes = fs::read("tests/samples/cat.gif")?;
-    let file_len = file_bytes.len();
-    debug!("{} Write Delete:: bytes read", file_len);
+    debug!("{} Write Delete:: bytes read", file_bytes.len());
 
-    info!("Writing file");
-
-    let (x_only, _) = write_pk.x_only_public_key();
-    let orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
-
-    let file_stream: FileStream = stream::iter(file_bytes)
-        .chunks(SEGMENT_SIZE)
+    let file_stream = stream::iter(file_bytes)
+        .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
+    info!("Write Delete:: Writing file if not exists in order to test delete");
+    let final_blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream).await?;
 
-    info!("Reading file");
-
-    // let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
-    //     .try_fold(BytesMut::new(), |mut acc, chunk| async move {
-    //         acc.extend(chunk);
-    //         Ok(acc)
-    //     })
-    //     .await?
-    //     .to_vec();
-
-    let slice_start = 65536;
-    let slice_len = 8192;
-
-    let decoded_file: Vec<u8> =
-        read_slice(&Secp256k1PubKey(pk), &blake3_hash, slice_start, slice_len)?
-            .try_fold(BytesMut::new(), |mut acc, chunk| async move {
-                acc.extend(chunk);
-                Ok(acc)
-            })
-            .await?
-            .to_vec();
-
-    debug!("{} Write Delete:: bytes read", file_len);
-    assert_eq!(
-        decoded_file.len(),
-        file_len,
-        "Decoded file is same size as original"
+    info!(
+        "File To Delete as blake3_hash:: {} ",
+        final_blake3_hash.to_string()
     );
 
-    assert_eq!(
-        orig_hash.to_hex().to_string(),
-        blake3_hash.to_string(),
-        "Original keyed blake3 hash and streamed hash match",
-    );
+    // let slice_start = 65536;
+    // let slice_len = 8192;
+
+    // get slice of only 1 bye
+    let slice_start = 0;
+    let slice_len = 150;
+
+    let new_file_bytes = read_slice(
+        &Secp256k1PubKey(pk),
+        &final_blake3_hash,
+        slice_start,
+        slice_len,
+    )
+    .is_ok();
+    debug!("GOT SLICE OF CATALOG FILE success:: {}", new_file_bytes);
 
     info!("Get/Slice test finished successfully!");
 

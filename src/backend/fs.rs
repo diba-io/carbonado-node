@@ -307,7 +307,7 @@ pub fn read_slice(
         .map(BaoHash::try_from)
         .collect::<Result<Vec<BaoHash>>>()?;
 
-    Ok(bytes)
+    Ok(bao_hashes)
 }
 
 pub async fn delete_file(pk: &Secp256k1PubKey) -> Result<()> {
