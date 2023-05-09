@@ -1,7 +1,6 @@
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Seek, Write},
-    path::{Path, PathBuf},
+    io::{Read, Seek, Write},
     pin::Pin,
     sync::Arc,
 };
@@ -131,6 +130,7 @@ pub async fn write_catalog(
     segment_hashes: &[BaoHash],
 ) -> Result<()> {
     debug!("Write catalog");
+
     let contents: Vec<u8> = segment_hashes
         .iter()
         .flat_map(|bao_hash| bao_hash.to_bytes())
@@ -189,7 +189,7 @@ pub fn read_file(pk: &Secp256k1PubKey, blake3_hash: &Blake3Hash) -> Result<FileS
                     0,
                     &write_pk_str,
                     SEGMENT_DIR,
-                    &format!("{}.c{}", segment_hash, NODE_FORMAT),
+                    &format!("{segment_hash}.c{NODE_FORMAT}"),
                 )?;
 
                 let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
@@ -276,73 +276,56 @@ pub fn read_catalog(write_pk_str: &str, file_hash: &Blake3Hash) -> Result<Vec<Ba
     Ok(bao_hashes)
 }
 
-#[allow(unused_variables)]
-pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
-    let pk_bytes = pk.to_bytes();
-    let (x_only_pk, _) = pk.into_inner().x_only_public_key();
+pub fn read_slice(
+    pk: &Secp256k1PubKey,
+    file_hash: &Blake3Hash,
+    slice_start: usize,
+    slice_len: usize,
+) -> Result<Vec<BaoHash>> {
+    trace!("Create a shared secret using ECDH");
+    let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
+    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
+    let write_pk_str = write_pk.to_string();
 
-    let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
-    trace!(">>>>>file_hash::   {}", file_hash);
+    let path = file_path(0, &write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
+
+    trace!("Read catalog at {path:?}");
+    let mut catalog_file = OpenOptions::new().read(true).open(path)?;
+
+    let mut bytes = vec![];
+    catalog_file.read_to_end(&mut bytes)?;
+
+    trace!("Read catalog at {:?}", catalog_file);
+    trace!(" )))) Read catalog BYTES len()  {:?}", bytes.len());
+
+    // GET RANGE ex: &bytes[1..4]);
+    let slice_end = slice_start + slice_len;
+    trace!(" {:?}", &bytes[slice_start..slice_end]);
+
+    let bao_hashes = bytes
+        .chunks_exact(bao::HASH_SIZE)
+        .map(BaoHash::try_from)
+        .collect::<Result<Vec<BaoHash>>>()?;
+
+    Ok(bao_hashes)
+}
+
+pub async fn delete_file(pk: &Secp256k1PubKey) -> Result<()> {
+    let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
+    let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
+    let write_pk_str = write_pk.to_string();
+    trace!("WRITE_PK_STR: {}", write_pk_str);
 
     for vol in &SYS_CFG.volumes {
-        let seg_file = &vol.path.join(SEGMENT_DIR).join(file_hash.to_string());
-        let seg_dir = &vol.path.join(SEGMENT_DIR);
-        remove_dir_contents(seg_dir, seg_file.to_path_buf()).unwrap();
-    }
+        trace!("VOLUME PATH: {:?}", vol.path);
 
-    for vol in &SYS_CFG.volumes {
-        let cat_path = &vol.path.join(CATALOG_DIR).join(file_hash.to_string());
-        let cat = &vol.path.join(CATALOG_DIR);
-        remove_dir_catalogs(cat.to_path_buf(), cat_path.to_path_buf()).unwrap();
-    }
-    Ok(())
-}
-
-#[allow(unused_variables)]
-fn remove_dir_contents<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
-    trace!(">>> remove_Segment_contents");
-    for entry in fs::read_dir(path)? {
-        trace!("Delete Segment File at {:?}", entry);
-        fs::remove_file(entry?.path())?;
+        let pk_path = vol.path.join(&write_pk_str);
+        let is_removed = fs::remove_dir_all(pk_path).is_ok();
+        trace!(
+            "VOLUME_{:?} WRITE_PK_STR REMOVED {:?}: ",
+            vol.path,
+            is_removed
+        );
     }
     Ok(())
 }
-
-#[allow(unused_variables)]
-fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
-    for entry in fs::read_dir(path)? {
-        trace!("Delete CATALOG File at {:?}", entry);
-        fs::remove_file(entry?.path())?;
-    }
-    Ok(())
-}
-
-// fn remove_dir_segements<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
-//     trace!(">>> remove_Segment_contents");
-//     for entry in fs::read_dir(path)? {
-//         let entry = entry?;
-//         trace!("ENTRY Delete SEGMENT File at {:?}", entry);
-
-//         match &entry {
-//             seg_file => {
-//                 fs::remove_file(seg_file.path())?;
-//                 trace!("Delete Segment File at {:?}", seg_file);
-//             }
-//         }
-//     }
-//     Ok(())
-// }
-
-// fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
-//     for entry in fs::read_dir(path)? {
-//         let entry = entry?;
-//         trace!("ENTRY Delete CATALOG File at {:?}", entry);
-//         match &entry {
-//             file => {
-//                 fs::remove_file(file.path())?;
-//                 trace!("FILE MATCH Delete CATALOG File at {:?}", file);
-//             }
-//         }
-//     }
-//     Ok(())
-// }

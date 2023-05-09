@@ -15,6 +15,16 @@ impl fmt::Display for Blake3Hash {
     }
 }
 
+impl TryFrom<&[u8]> for Blake3Hash {
+    type Error = Error;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut hash = [0_u8; 32];
+        hash.copy_from_slice(&value[0..32]);
+        Ok(Self(blake3::Hash::try_from(hash)?))
+    }
+}
+
 pub struct BaoHash(pub bao::Hash);
 
 impl BaoHash {

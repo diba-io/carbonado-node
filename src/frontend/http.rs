@@ -3,7 +3,7 @@ use std::{net::SocketAddr, str::FromStr};
 use anyhow::Result;
 use axum::{
     body::StreamBody,
-    extract::{BodyStream, Path},
+    extract::{BodyStream, Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -16,10 +16,32 @@ use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, write_file, FileStream},
+    backend::fs::{delete_file, read_file, read_slice, write_file, FileStream},
     config::{node_shared_secret, SYS_CFG},
     prelude::*,
 };
+
+struct FileSlice {
+    //#[serde(default, deserialize_with = "empty_string_as_none")]
+    pk: String,
+    black3_hash: String,
+    index_start: usize,
+    range_end: usize,
+}
+
+/// Serde deserialization decorator to map empty Strings to None,
+// fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+// where
+//     D: Deserializer<'de>,
+//     T: FromStr,
+//     T::Err: fmt::Display,
+// {
+//     let opt = Option::<String>::deserialize(de)?;
+//     match opt.as_deref() {
+//         None | Some("") => Ok(None),
+//         Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
+//     }
+// }
 
 #[axum_macros::debug_handler]
 async fn post_file(
@@ -69,13 +91,32 @@ async fn get_file(
     Ok((StatusCode::OK, StreamBody::new(file_stream)))
 }
 
+// #[axum_macros::debug_handler]
+// //async fn get_slice(Query(my_params): Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
+// async fn get_slice(Query(my_params): Query<FileSlice>) -> Result<impl IntoResponse, AppError> {
+//     // let pk = my_params.black3_hash;
+//     // let blake3_hash = my_params.black3_hash;
+//     // let start_index = my_params.index_start;
+//     // let range_end = my_params.range_end;
+//     // debug!("my_params :: blake {:?} ", my_params.black3_hash);
+//     // debug!("my_params :: start {:?} ", my_params.index_start);
+//     // debug!("my_params :: end {:?} ", my_params.range_end);
+//     let file_stream = read_slices(
+//         my_params.pk,
+//         my_params.black3_hash,
+//         my_params.index_start,
+//         my_params.range_end,
+//     )
+//     .await?;
+//     Ok((StatusCode::OK, StreamBody::new(file_stream)))
+// }
+
 #[axum_macros::debug_handler]
-async fn remove_file(
-    Path((pk, blake3_hash)): Path<(String, String)>,
-) -> Result<impl IntoResponse, AppError> {
+async fn remove_file(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    delete_file(pk, blake3_hash.as_bytes())?;
-    Ok((StatusCode::OK, blake3_hash))
+    let del = delete_file(&pk).await.is_ok();
+
+    Ok((StatusCode::OK, del.to_string()))
 }
 
 async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
@@ -89,9 +130,10 @@ async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
 
 pub async fn start() -> Result<()> {
     let app = Router::new()
-        .route("/remove/:pk/:blake3_hash", delete(remove_file))
+        .route("/remove/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
+        // .route("/slice/", get(get_slice))
         .route("/key/:pk", get(key))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
