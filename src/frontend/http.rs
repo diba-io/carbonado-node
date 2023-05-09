@@ -100,10 +100,17 @@ async fn get_file(
 }
 
 #[axum_macros::debug_handler]
-async fn get_named_file(
+async fn get_file_named(
     Path((pk, name)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
     debug!("get_file_named called with {pk}/{name}");
+
+    let reencoded =
+        utf8_percent_encode(&percent_decode_str(&name).decode_utf8()?, FORM).to_string();
+
+    if name != reencoded {
+        return Err(AppError(StatusCode::BAD_REQUEST, anyhow!("Provided file name contains characters that have not been encoded. It should be: {reencoded}")));
+    }
 
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
     let file_stream = read_file(&pk, &Lookup::Name(name))?;
@@ -135,7 +142,7 @@ pub async fn start() -> Result<()> {
         .route("/store/:pk", post(post_file))
         .route("/store_named/:pk/:name", post(post_file_named))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
-        .route("/retrieve_named/:pk/:name", get(get_named_file))
+        .route("/retrieve_named/:pk/:name", get(get_file_named))
         .route("/key/:pk", get(key))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
