@@ -7,7 +7,7 @@ use carbonado_node::{
     backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
-    structs::Secp256k1PubKey,
+    structs::{Hash, Lookup, Secp256k1PubKey},
 };
 use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
@@ -47,13 +47,16 @@ async fn write_read() -> Result<()> {
 
     info!("Reading file");
 
-    let decoded_file: Vec<u8> = read_file(&Secp256k1PubKey(pk), &blake3_hash)?
-        .try_fold(BytesMut::new(), |mut acc, chunk| async move {
-            acc.extend(chunk);
-            Ok(acc)
-        })
-        .await?
-        .to_vec();
+    let decoded_file: Vec<u8> = read_file(
+        &Secp256k1PubKey(pk),
+        &Lookup::Hash(Hash::Blake3(blake3_hash.clone())),
+    )?
+    .try_fold(BytesMut::new(), |mut acc, chunk| async move {
+        acc.extend(chunk);
+        Ok(acc)
+    })
+    .await?
+    .to_vec();
 
     assert_eq!(
         decoded_file.len(),

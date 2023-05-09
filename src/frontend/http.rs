@@ -71,7 +71,7 @@ async fn post_file_named(
     Path((pk, name)): Path<(String, String)>,
     body: BodyStream,
 ) -> Result<impl IntoResponse, AppError> {
-    debug!("post_file called with {pk}");
+    debug!("post_file_named called with {pk}/{name}");
 
     let reencoded =
         utf8_percent_encode(&percent_decode_str(&name).decode_utf8()?, FORM).to_string();
@@ -89,9 +89,24 @@ async fn post_file_named(
 async fn get_file(
     Path((pk, blake3_hash)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
+    debug!("get_file called with {pk}/{blake3_hash}");
+
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
     let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
-    let file_stream = read_file(&pk, &blake3_hash)?;
+
+    let file_stream = read_file(&pk, &Lookup::Hash(Hash::Blake3(blake3_hash)))?;
+
+    Ok((StatusCode::OK, StreamBody::new(file_stream)))
+}
+
+#[axum_macros::debug_handler]
+async fn get_named_file(
+    Path((pk, name)): Path<(String, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    debug!("get_file_named called with {pk}/{name}");
+
+    let pk = Secp256k1PubKey::try_from(pk.as_str())?;
+    let file_stream = read_file(&pk, &Lookup::Name(name))?;
 
     Ok((StatusCode::OK, StreamBody::new(file_stream)))
 }
@@ -118,8 +133,9 @@ pub async fn start() -> Result<()> {
     let app = Router::new()
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
         .route("/store/:pk", post(post_file))
-        .route("/store/:pk/:name", post(post_file_named))
+        .route("/store_named/:pk/:name", post(post_file_named))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
+        .route("/retrieve_named/:pk/:name", get(get_named_file))
         .route("/key/:pk", get(key))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))

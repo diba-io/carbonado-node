@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{Error, Result};
 
+#[derive(Clone, Debug)]
 pub struct Blake3Hash(pub blake3::Hash);
 
 impl fmt::Display for Blake3Hash {
@@ -15,6 +16,7 @@ impl fmt::Display for Blake3Hash {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct BaoHash(pub bao::Hash);
 
 impl BaoHash {
@@ -53,11 +55,32 @@ impl TryFrom<&[u8]> for BaoHash {
 //     }
 // }
 
+#[derive(Clone, Debug)]
 pub enum Hash {
     Blake3Bytes(Box<[u8]>),
     BaoBytes(Box<[u8]>),
     Blake3(Blake3Hash),
     Bao(BaoHash),
+}
+
+#[derive(Clone, Debug)]
+pub enum Lookup {
+    Hash(Hash),
+    Name(String),
+}
+
+impl Display for Lookup {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Lookup::Hash(hash) => match hash {
+                Hash::Blake3Bytes(_) => todo!(),
+                Hash::BaoBytes(_) => todo!(),
+                Hash::Blake3(blake3_hash) => f.write_str(&blake3_hash.to_string()),
+                Hash::Bao(_) => todo!(),
+            },
+            Lookup::Name(name) => f.write_str(name),
+        }
+    }
 }
 
 pub struct Secp256k1PubKey(pub secp256k1::PublicKey);
