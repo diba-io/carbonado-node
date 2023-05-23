@@ -76,6 +76,9 @@ pub async fn write_file<'a>(
     trace!("Check catalog at {path:?}");
 
     if path.exists() {
+        if name.is_some() {
+            // Is a named catalog, so the old one must be versioned
+        }
         return Err(anyhow!("This file already exists for this public key."));
     }
 
