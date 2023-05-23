@@ -54,6 +54,7 @@ struct SysCfgFile {
 pub struct SysCfg {
     pub http_port: u16,
     pub private_key: SecretKey,
+    pub public_key: PublicKey,
     pub drive_redundancy: usize,
     pub volumes: Vec<Volume>,
     /// Total allocated capacity for the node in megabytes
@@ -83,7 +84,8 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         .unwrap_or_else(|| SecretKey::new(&mut rand::thread_rng()));
 
     let secp = Secp256k1::new();
-    info!("Node Public Key: {}", private_key.public_key(&secp));
+    let public_key = private_key.public_key(&secp);
+    info!("Node Public Key: {public_key}");
 
     let drive_redundancy = sys_cfg.drive_redundancy.unwrap_or(1);
 
@@ -115,6 +117,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
     let config = SysCfg {
         http_port,
         private_key,
+        public_key,
         drive_redundancy,
         volumes,
         capacity,

@@ -13,12 +13,11 @@ use bytes::BytesMut;
 use futures_util::{stream, StreamExt};
 use log::{debug, info, trace};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
-use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
 
 use crate::{
     backend::fs::{delete_file, read_file, write_file, FileStream},
-    config::{node_shared_secret, SYS_CFG},
+    config::SYS_CFG,
     prelude::*,
 };
 
@@ -127,13 +126,8 @@ async fn remove_file(
     Ok((StatusCode::OK, blake3_hash))
 }
 
-async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
-    let pk = PublicKey::from_str(&pk)?;
-
-    let ss = node_shared_secret(&pk)?;
-    let ss = ss.display_secret();
-
-    Ok(ss.to_string())
+async fn id() -> Result<impl IntoResponse, AppError> {
+    Ok(SYS_CFG.public_key.to_string())
 }
 
 pub async fn start() -> Result<()> {
@@ -143,7 +137,7 @@ pub async fn start() -> Result<()> {
         .route("/store_named/:pk/:name", post(post_file_named))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         .route("/retrieve_named/:pk/:name", get(get_file_named))
-        .route("/key/:pk", get(key))
+        .route("/id", get(id))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
         .layer(CorsLayer::permissive());
