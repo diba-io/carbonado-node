@@ -1,21 +1,11 @@
-use std::{
-    fs::{self, OpenOptions},
-    io::{self, Read, Seek, Write},
-    path::{Path, PathBuf},
-    pin::Pin,
-    sync::Arc,
-};
-
-use chrono::{Local, NaiveDateTime, TimeZone, Utc};
-
 use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
 use bytes::BytesMut;
-use carbonado::{constants::Format, file::Header, file_cat::CatHeader, structs::Encoded};
+use carbonado::{constants::Format, file::Header, structs::Encoded};
+use chrono::{NaiveDateTime, TimeZone, Utc};
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 use infer::{self};
 use log::{debug, trace};
-//use magic::{Cookie, CookieFlags};
 use par_stream::{ParStreamExt, TryParStreamExt};
 use rayon::{
     prelude::{IndexedParallelIterator, ParallelIterator},
@@ -23,10 +13,18 @@ use rayon::{
     vec,
 };
 use secp256k1::{PublicKey, SecretKey};
+use std::{
+    fs::{self, OpenOptions},
+    io::{self, Read, Seek, Write},
+    path::{Path, PathBuf},
+    pin::Pin,
+    sync::Arc,
+};
 use tokio::sync::Mutex;
 
 use crate::{
     config::{ensure_pk_dirs_exist, file_path, node_shared_secret, SYS_CFG},
+    header::CatHeader,
     prelude::*,
 };
 
@@ -225,17 +223,14 @@ pub async fn write_catalog(
                 trace!("Open catalog file at {path:?}");
                 // JSON FORMATTED CBOR DATA ENDPOINT
                 let decoded_cbor_data: CborData = serde_cbor::from_slice(&cbor_data)?;
-                trace!(
-                    "###################### JSON DATA decoded_cbpr_data; {:?}",
-                    decoded_cbor_data
-                );
+                trace!(">>> JSON DATA decoded_cbpr_data; {:?}", decoded_cbor_data);
 
                 let mut file = OpenOptions::new()
                     .create_new(true)
                     .write(true)
                     .open(&path)?;
 
-                trace!("Write file contents");
+                trace!("Write header and file contents");
                 file.write_all(&header_bytes)?;
                 file.write_all(&contents)?;
                 file.flush()?;
