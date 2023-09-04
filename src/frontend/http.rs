@@ -11,6 +11,7 @@ use axum::{
 };
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt};
+use infer;
 use log::{debug, info, trace};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
 use secp256k1::PublicKey;
@@ -31,6 +32,9 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
             while remainder.len() < SEGMENT_SIZE {
                 if let Some(chunk) = body_stream.next().await {
                     let bytes = chunk?;
+
+                    let convert = &bytes as &[u8];
+                    trace!("Show me the convert: {:?}", convert);
                     remainder.extend(bytes);
 
                     if remainder.len() >= SEGMENT_SIZE {
@@ -57,6 +61,7 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
 #[axum_macros::debug_handler]
 async fn post_file(
     Path(pk): Path<String>,
+
     body: BodyStream,
 ) -> Result<impl IntoResponse, AppError> {
     debug!("post_file called with {pk}");
@@ -81,6 +86,7 @@ async fn post_file_named(
     }
 
     let hash = write_file_handler(&pk, body, Some(name)).await?;
+    //let buf = [0xFF, 0xD8, 0xFF, 0xAA];
 
     Ok((StatusCode::OK, hash))
 }

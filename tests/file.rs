@@ -1,14 +1,18 @@
 use std::fs;
+use std::pin::Pin;
+//use tokio::stream::StreamExt;
 
 use anyhow::Result;
 use axum::body::Bytes;
 use bytes::BytesMut;
 use carbonado_node::{
-    backend::fs::{read_file, write_file, FileStream},
+    backend::fs::{get_mime_type, read_catalog, read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
     structs::{Hash, Lookup, Secp256k1PubKey},
 };
+// use futures::stream::StreamExt;
+
 use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
 use rand::thread_rng;
@@ -87,48 +91,23 @@ async fn read_write_delete_file() -> Result<()> {
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
+    // second file to write
+    let (_sk, pk) = generate_keypair(&mut thread_rng());
+
     let file_stream = stream::iter(file_bytes.clone())
         .chunks(1024 * 1024)
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    // first file to write
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream, None)
-        .await
-        .is_ok();
-
-    if file_did_write {
-        info!(
-            "Write File Group One to Delete File as blake3_hash:: {} ",
-            file_did_write.to_string()
-        );
-    }
-
-    // second file to write
-    let (_sk, pk) = generate_keypair(&mut thread_rng());
-
-    let file_stream = stream::iter(file_bytes)
-        .chunks(1024 * 1024)
-        .map(|chunk| Ok(Bytes::from(chunk)))
-        .boxed();
-
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None)
-        .await
-        .is_ok();
 
-    if blake3_hash {
-        info!(
-            "Write File in Group Two to Delete File as blake3_hash:: {} ",
-            blake3_hash.to_string()
-        );
-    }
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None).await?;
+
+    info!("Reading file: {blake3_hash}");
+    // TODO: need to debug read_file
 
     // TODO: This is not how you delete files
-    // let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
+    //let new_file_bytes = delete_file(Secp256k1PubKey(pk), &file_bytes).is_err();
     // debug!("Write Delete:: deleted file:: {:?}", new_file_bytes);
 
     // TODO: Check number of files

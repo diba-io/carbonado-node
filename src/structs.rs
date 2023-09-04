@@ -3,6 +3,8 @@ use std::{
     str::FromStr,
 };
 
+use serde::{Deserialize, Serialize};
+
 use anyhow::{Error, Result};
 
 #[derive(Clone, Debug)]
@@ -120,4 +122,14 @@ impl Secp256k1PubKey {
 pub enum PubKey {
     Secp256k1Bytes(Box<[u8]>),
     Secp256k1(secp256k1::PublicKey),
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+
+pub struct CborData {
+    /// Number of bytes added to pad to align zfec chunks and bao slices.
+    pub str_name: String,
+    pub str_date: String,
+    pub str_mime_type: String,
+    // pub metadata: Option<Vec<u8>>,
 }
