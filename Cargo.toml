@@ -13,19 +13,13 @@ rayon = ["blake3/rayon"]
 
 [dependencies]
 anyhow = "1.0.69"
-#axum = "0.6.9"
-axum = { version = "0.6.9", features = ["headers"] }
-
-
+axum = "0.6.9"
+#axum = { version = "0.6.9", features = ["headers"] }
 axum-macros = "0.3.4"
 bao = "0.12.1"
 blake3 = "1.3.3"
 bytes = "1.4.0"
-
-#carbonado = "0.3.0-rc.8"
-
-carbonado = { path = "/Users/wesleyparr/Projects/carbonado/carbonado" }
-
+carbonado = "0.3.0-rc.8"
 chrono = "0.4.23"
 clap = { version = "4.1.8", features = ["derive"] }
 directories = "5.0.1"
@@ -34,9 +28,7 @@ flexi_syslog = "0.5.2"
 futures = "0.3.28"
 futures-util = "0.3.28"
 hex = "0.4.3"
-hyper = "0.14"
 # human_bytes = "0.4.1"
-# infer = "0.13.0"
 infer = { version = "0.15.0", default-features = false }
 lazy_static = "1.4.0"
 log = "0.4.17"

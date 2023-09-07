@@ -368,7 +368,7 @@ pub fn get_mime_type(file_bytes: &[u8]) -> Option<String> {
     let kind = infer::get(file_bytes)?;
 
     trace!("fn get Mime_Type : {} ", &kind.mime_type());
-    trace!("fn get Extension : {} ", &kind.extension());
+    // trace!("fn get Extension : {} ", &kind.extension());
     Some(kind.mime_type().to_owned())
 }
 
