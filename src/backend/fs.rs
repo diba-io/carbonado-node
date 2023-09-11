@@ -10,7 +10,6 @@ use par_stream::{ParStreamExt, TryParStreamExt};
 use rayon::{
     prelude::{IndexedParallelIterator, ParallelIterator},
     slice::ParallelSlice,
-    vec,
 };
 use secp256k1::{PublicKey, SecretKey};
 use std::{
@@ -34,6 +33,7 @@ pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
     name: Option<String>,
+    mime_type: &str,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
@@ -53,28 +53,12 @@ pub async fn write_file<'a>(
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
-    let shared_mime_type = Arc::new(Mutex::new(String::from("")));
-    let ref_shared_mime_type = shared_mime_type.clone();
-    //let data = Arc::new(Mutex::new(String::from("Hello")));
-
-    // Clone the Arc for use in the async block
-    // let data_clone = data.clone();
-
     let segment_hashes: Vec<BaoHash> = file_stream
         .try_par_then(None, move |segment: Bytes| {
             trace!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
 
-            let shared_string = Arc::clone(&ref_shared_mime_type);
-
             async move {
-                let mime_type_is = get_mime_type(&segment.as_ref());
-
-                let mut locked_string = shared_string.lock().await;
-                locked_string.push_str(&mime_type_is.clone().unwrap());
-
-                drop(locked_string);
-
                 thread_file_hasher.lock().await.update(&segment);
                 trace!("Encoding segment");
                 let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
@@ -88,8 +72,6 @@ pub async fn write_file<'a>(
         .try_collect()
         .await?;
 
-    let mime_type_value = shared_mime_type.lock().await;
-
     let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
 
     trace!("Check if catalog already exists");
@@ -102,14 +84,7 @@ pub async fn write_file<'a>(
     }
 
     trace!("Append each hash to its catalog");
-    write_catalog(
-        &write_pk_str,
-        &file_hash,
-        name,
-        &mime_type_value,
-        &segment_hashes,
-    )
-    .await?;
+    write_catalog(&write_pk_str, &file_hash, name, mime_type, &segment_hashes).await?;
 
     debug!("Finished write_file");
     Ok(file_hash)
@@ -122,7 +97,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
     let encoded_chunk_size = encode_info.bytes_verifiable as usize / SYS_CFG.volumes.len();
     trace!("Extension: {}", encoded_chunk_size);
 
-    let metadata = std::option::Option::Some([0 as u8; 8]);
+    let metadata = std::option::Option::Some([0_u8; 8]);
 
     encoded_bytes
         .par_chunks_exact(encoded_chunk_size)
@@ -177,13 +152,13 @@ pub async fn write_catalog(
     let write_pk_str = write_pk_str.to_owned();
     let file_hash = file_hash.to_string();
     let name = name.unwrap_or(file_hash);
-    debug!("NAME value TO HEADER: {}", &name);
+    // debug!("NAME value TO HEADER: {}", &name);
 
     let date_utc = Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(61, 0).unwrap());
     let str_date = date_utc.to_string();
-    debug!("the current UTC: DATE {}", &str_date);
+    // debug!("the current UTC: DATE {}", &str_date);
 
-    debug!(">>>>  MIME_TYPE : TO HEADER: {}", mime_type.clone());
+    // debug!(">>>>  MIME_TYPE : TO HEADER: {}", mime_type.clone());
     let str_mime_type = mime_type.to_string();
     let str_name = name.to_string();
 
@@ -218,12 +193,12 @@ pub async fn write_catalog(
 
                 let path = file_path(volume_index, &write_pk_str, CATALOG_DIR, &name)?;
 
-                // MAKE THIS ENDPOINT AVAILABLE
-                trace!("ENDPOINT");
-                trace!("Open catalog file at {path:?}");
+                // MAKE THE ENDPOINT AVAILABLE
+                trace!(">>>> ENDPOINTS <<<<<");
+                debug!("Open catalog file at {path:?}");
                 // JSON FORMATTED CBOR DATA ENDPOINT
                 let decoded_cbor_data: CborData = serde_cbor::from_slice(&cbor_data)?;
-                trace!(">>> JSON DATA decoded_cbpr_data; {:?}", decoded_cbor_data);
+                debug!(">>> JSON DATA decoded_cbpr_data; {:?}", decoded_cbor_data);
 
                 let mut file = OpenOptions::new()
                     .create_new(true)
@@ -254,7 +229,7 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
     let write_pk_str = write_pk.to_string();
 
     trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
-    let catalog_file = read_catalog(&pk, lookup)?;
+    let catalog_file = read_catalog(pk, lookup)?;
 
     trace!("For each hash, read each chunk into a segment, then decode that segment");
     let file_bytes: FileStream = stream::iter(catalog_file)
@@ -366,7 +341,6 @@ pub fn read_catalog(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<Vec<BaoHash
 pub fn get_mime_type(file_bytes: &[u8]) -> Option<String> {
     //let kind = infer::get(file_bytes).expect("file type is known");
     let kind = infer::get(file_bytes)?;
-
     trace!("fn get Mime_Type : {} ", &kind.mime_type());
     // trace!("fn get Extension : {} ", &kind.extension());
     Some(kind.mime_type().to_owned())

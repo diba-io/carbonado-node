@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::{anyhow, Result};
+
 use axum::{
     body::StreamBody,
     extract::{BodyStream, Path},
@@ -11,7 +12,7 @@ use axum::{
 };
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt};
-use infer;
+use infer::{self};
 use log::{debug, info, trace};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
 use secp256k1::PublicKey;
@@ -23,8 +24,31 @@ use crate::{
     prelude::*,
 };
 
-async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
+async fn write_file_handler(
+    pk: &str,
+    mut body: BodyStream,
+    name: Option<String>,
+) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
+
+    let mut buffer = Vec::new();
+
+    while let Some(chunk) = body.next().await {
+        match chunk {
+            Ok(bytes) => buffer.extend_from_slice(&bytes),
+            Err(e) => return Err(e.into()),
+        }
+    }
+    let mut is_mime_type = "get mmime_type";
+    let kind = infer::get(&buffer);
+    match kind {
+        Some(mime_type) => {
+            let mime_type = mime_type;
+            debug!(">>>>> LOOP mime_type: {:?}", &mime_type.mime_type());
+            is_mime_type = mime_type.mime_type();
+        }
+        None => debug!(">>>>> LOOP no mime_type found"),
+    };
 
     let file_stream: FileStream = stream::try_unfold(
         (body, BytesMut::with_capacity(SEGMENT_SIZE * 2)),
@@ -33,8 +57,6 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
                 if let Some(chunk) = body_stream.next().await {
                     let bytes = chunk?;
 
-                    let convert = &bytes as &[u8];
-                    trace!("Show me the convert: {:?}", convert);
                     remainder.extend(bytes);
 
                     if remainder.len() >= SEGMENT_SIZE {
@@ -53,7 +75,7 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
     )
     .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream, name).await?;
+    let Blake3Hash(hash) = write_file(pk, file_stream, name, is_mime_type).await?;
 
     Ok(hash.to_hex().to_string())
 }
@@ -86,7 +108,6 @@ async fn post_file_named(
     }
 
     let hash = write_file_handler(&pk, body, Some(name)).await?;
-    //let buf = [0xFF, 0xD8, 0xFF, 0xAA];
 
     Ok((StatusCode::OK, hash))
 }

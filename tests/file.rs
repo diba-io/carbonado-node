@@ -47,7 +47,7 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None).await?;
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, "mime_type_test").await?;
 
     info!("Reading file");
 
@@ -101,7 +101,7 @@ async fn read_write_delete_file() -> Result<()> {
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None).await?;
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, "mime_type_test").await?;
 
     info!("Reading file: {blake3_hash}");
     // TODO: need to debug read_file
