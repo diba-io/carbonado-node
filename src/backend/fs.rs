@@ -139,7 +139,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
 pub async fn write_catalog(
     write_pk_str: &str,
     file_hash: &Blake3Hash,
-    name: Option<String>,
+    file_name: Option<String>,
     mime_type: &str,
     seg_hashes: &[BaoHash],
 ) -> Result<()> {
@@ -151,29 +151,24 @@ pub async fn write_catalog(
 
     let write_pk_str = write_pk_str.to_owned();
     let file_hash = file_hash.to_string();
-    let name = name.unwrap_or(file_hash);
-    // debug!("NAME value TO HEADER: {}", &name);
+    let name = file_name.unwrap_or(file_hash);
 
     let date_utc = Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(61, 0).unwrap());
-    let str_date = date_utc.to_string();
-    // debug!("the current UTC: DATE {}", &str_date);
-
-    // debug!(">>>>  MIME_TYPE : TO HEADER: {}", mime_type.clone());
-    let str_mime_type = mime_type.to_string();
-    let str_name = name.to_string();
+    let date = date_utc.to_string();
+    let mime_type = mime_type.to_string();
 
     // HEADER METADATA
     let cat_data = CborData {
-        str_name,
-        str_date,
-        str_mime_type,
+        name: name.to_string(),
+        date,
+        mime_type,
     };
 
     // Serialize to CBOR
     let cbor_data = serde_cbor::to_vec(&cat_data)?;
-    println!("cbor data; {:?}", cbor_data);
+    debug!("cbor data; {:?}", cbor_data);
     let length = cbor_data.len();
-    println!("cbor lenth:::  {:?}", length);
+    debug!("cbor lenth:::  {:?}", length);
 
     stream::iter(0..SYS_CFG.volumes.len())
         .par_map(None, move |volume_index| {

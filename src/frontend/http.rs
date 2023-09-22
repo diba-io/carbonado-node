@@ -44,10 +44,10 @@ async fn write_file_handler(
     match kind {
         Some(mime_type) => {
             let mime_type = mime_type;
-            debug!(">>>>> LOOP mime_type: {:?}", &mime_type.mime_type());
+            debug!("mime_type: {:?}", &mime_type.mime_type());
             is_mime_type = mime_type.mime_type();
         }
-        None => debug!(">>>>> LOOP no mime_type found"),
+        None => debug!("no mime_type found"),
     };
 
     let file_stream: FileStream = stream::try_unfold(

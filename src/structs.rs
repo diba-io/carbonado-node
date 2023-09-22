@@ -128,8 +128,8 @@ pub enum PubKey {
 
 pub struct CborData {
     /// Number of bytes added to pad to align zfec chunks and bao slices.
-    pub str_name: String,
-    pub str_date: String,
-    pub str_mime_type: String,
+    pub name: String,
+    pub date: String,
+    pub mime_type: String,
     // pub metadata: Option<Vec<u8>>,
 }
