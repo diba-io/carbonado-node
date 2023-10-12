@@ -6,7 +6,7 @@ use anyhow::{Error, Result};
 use axum::body::Bytes;
 use bytes::BytesMut;
 use carbonado_node::{
-    backend::fs::{get_mime_type, read_catalog, read_file, write_file, FileStream},
+    backend::fs::{read_catalog, read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
     structs::{Hash, Lookup, Secp256k1PubKey},
@@ -40,7 +40,7 @@ async fn write_read() -> Result<()> {
     info!("Writing file");
 
     let (x_only, _) = write_pk.x_only_public_key();
-    let _orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
+    let orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
 
     let file_stream: FileStream = stream::iter(file_bytes)
         .chunks(SEGMENT_SIZE)
@@ -68,11 +68,11 @@ async fn write_read() -> Result<()> {
         "Decoded file is same size as original"
     );
 
-    // assert_eq!(
-    //     orig_hash.to_hex().to_string(),
-    //     blake3_hash.to_string(),
-    //     "Original keyed blake3 hash and streamed hash match",
-    // );
+    assert_eq!(
+        orig_hash.to_hex().to_string(),
+        blake3_hash.to_string(),
+        "Original keyed blake3 hash and streamed hash match",
+    );
 
     // TODO: This is not how you delete files
     // let new_file_bytes = delete_file(Secp256k1PubKey(write_pk), &file_bytes).is_err();
