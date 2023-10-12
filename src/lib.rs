@@ -7,6 +7,7 @@ use crate::frontend::http;
 pub mod backend;
 pub mod config;
 pub mod constants;
+pub mod errors;
 pub mod frontend;
 pub mod header;
 pub mod structs;

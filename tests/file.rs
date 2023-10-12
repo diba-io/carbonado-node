@@ -40,7 +40,7 @@ async fn write_read() -> Result<()> {
     info!("Writing file");
 
     let (x_only, _) = write_pk.x_only_public_key();
-    // let orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
+    let _orig_hash = blake3::keyed_hash(&x_only.serialize(), &file_bytes);
 
     let file_stream: FileStream = stream::iter(file_bytes)
         .chunks(SEGMENT_SIZE)
@@ -62,11 +62,11 @@ async fn write_read() -> Result<()> {
     .await?
     .to_vec();
 
-    // assert_eq!(
-    //     decoded_file.len(),
-    //     file_len,
-    //     "Decoded file is same size as original"
-    // );
+    assert_eq!(
+        decoded_file.len(),
+        file_len,
+        "Decoded file is same size as original"
+    );
 
     // assert_eq!(
     //     orig_hash.to_hex().to_string(),

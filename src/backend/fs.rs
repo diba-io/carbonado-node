@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
 use bytes::BytesMut;
-use carbonado::{constants::Format, file::Header, structs::Encoded};
+use carbonado::{constants::Format, error::CarbonadoError, file::Header, structs::Encoded};
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 use infer::{self};
@@ -13,6 +13,7 @@ use rayon::{
 };
 use secp256k1::{PublicKey, SecretKey};
 use std::{
+    fmt::DebugTuple,
     fs::{self, OpenOptions},
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -26,6 +27,20 @@ use crate::{
     header::CatHeader,
     prelude::*,
 };
+
+use bao::Hash;
+// mod structs {
+//     pub struct Hash {
+//         // ... your fields here, probably:
+//         bytes: [u8; 32],
+//     }
+
+//     impl From<[u8; 32]> for Hash {
+//         fn from(bytes: [u8; 32]) -> Self {
+//             Hash { bytes }
+//         }
+//     }
+// }
 
 pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
@@ -115,9 +130,16 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
                 metadata,
             )?;
             let header_bytes = header.try_to_vec()?;
+            // Helper function for naming a Carbonado file/Header.filename() archive file.
+            // file name is generated here
+            // but it is not stored as metadata
             let file_name = header.file_name();
 
             let path = file_path(chunk_index, &hex::encode(pk), SEGMENT_DIR, &file_name)?;
+
+            // path tells it where to write segment but doesn't preserve it
+            // if we write it to sgement header, it won't be readable at the corrrect time.
+            // we need it to be wirtten to file?
 
             trace!("Write segment at {path:?}");
             let mut file = OpenOptions::new()
@@ -180,6 +202,10 @@ pub async fn write_catalog(
             let cbor_data = cbor_data.clone();
             let metadata = Some(cbor_data.clone());
 
+            // convert to <Option[u8; 8]>
+            let my_array_option: Option<[u8; 8]> = metadata.and_then(vec_to_array);
+            let metadata = my_array_option;
+
             move || {
                 let header = CatHeader { cbor_len, metadata };
                 let header_bytes = header.try_to_vec()?;
@@ -216,17 +242,18 @@ pub async fn write_catalog(
 }
 
 pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
-    debug!("Read file wiht lookup: {lookup}");
+    debug!(">>>>>>>>>>>>>>>>>> Read file witn lookup: {lookup} <<<<<<<<<<<<<<<<<<<<<<<<<<,");
 
-    trace!("Create a shared secret using ECDH");
+    trace!(">>>>>>>>>>> SEGMENTS Create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
 
-    trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
+    trace!(">>>>>>>>>>> Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
     let catalog_file = read_catalog(pk, lookup)?;
 
-    trace!("For each hash, read each chunk into a segment, then decode that segment");
+    trace!(">>>>>>>>>>> For each hash, read each chunk into a segment, then decode that segment");
+
     let file_bytes: FileStream = stream::iter(catalog_file)
         .par_then(None, move |segment_hash| {
             let write_pk_str = write_pk_str.clone();
@@ -239,7 +266,20 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                     &format!("{}.c{}", segment_hash, NODE_FORMAT),
                 )?;
 
+                // segment hash is wrong, causing to look for a filename that is not there.
+                debug!("243 > {}", segment_hash);
+                debug!("244 >");
+                debug!("245 >");
+
+                println!("Message here {}", write_pk_str);
+
                 let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
+
+                debug!(
+                    ">>>> >>>>>>>>>>> ############ try to read in from path :: chunk_file >>>>>"
+                );
+
+                // HEADER VERSUS CAT HEADER
                 let header = Header::try_from(&chunk_file)?;
 
                 let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
@@ -250,17 +290,14 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                             let write_pk_str = write_pk_str.clone();
                             let segment_hash = segment_hash.clone();
                             move || {
-                                trace!("Get catalogs directory path");
+                                debug!(" >>>>>>> =====  Get catalogs directory path");
+
                                 let path = file_path(
                                     volume_index,
                                     &write_pk_str,
                                     SEGMENT_DIR,
                                     &segment_hash,
                                 )?;
-
-                                // let cookie = Cookie::open(magic::flags::MIME_TYPE)?;
-                                // let mime_type = cookie.file(path)?;
-                                // println!("====>>>>>> LIKE MAGIC :: MIME Type: {}", mime_type);
 
                                 trace!("Read segment file at {path:?}");
                                 let mut file = OpenOptions::new().read(true).open(path)?;
@@ -311,14 +348,19 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
 }
 
 pub fn read_catalog(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<Vec<BaoHash>> {
-    trace!("Create a shared secret using ECDH");
+    trace!("CATALOG Create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
 
-    let path = file_path(0, &write_pk_str, CATALOG_DIR, &lookup.to_string())?;
+    let path = file_path(
+        0,
+        &write_pk_str,
+        CATALOG_DIR,
+        &format!("{}.cat", &lookup.to_string()),
+    )?;
 
-    trace!("Read catalog at {path:?}");
+    trace!("################# >>>> Read catalog at {path:?}");
     let mut file = OpenOptions::new().read(true).open(path)?;
 
     let mut bytes = vec![];
@@ -411,3 +453,23 @@ fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
 //     }
 //     Ok(())
 // }
+
+fn vec_to_array(vec: Vec<u8>) -> Option<[u8; 8]> {
+    if vec.len() == 8 {
+        let mut array = [0u8; 8];
+        array.copy_from_slice(&vec);
+        Some(array)
+    } else {
+        None
+    }
+}
+
+/// Decodes a Bao hash from a hexadecimal string.
+pub fn decode_bao_hash(hash: &[u8]) -> Result<Hash, CarbonadoError> {
+    if hash.len() != bao::HASH_SIZE {
+        Err(CarbonadoError::HashDecodeError(bao::HASH_SIZE, hash.len()))
+    } else {
+        let hash_array: [u8; bao::HASH_SIZE] = hash[..].try_into()?;
+        Ok(hash_array.into())
+    }
+}
