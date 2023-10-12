@@ -68,6 +68,7 @@ async fn write_read() -> Result<()> {
         "Decoded file is same size as original"
     );
 
+    // In order to match original, we would need to minus the catalog header, which is not part of the "decoded file"
     assert_eq!(
         orig_hash.to_hex().to_string(),
         blake3_hash.to_string(),

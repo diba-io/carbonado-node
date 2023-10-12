@@ -7,7 +7,7 @@ use serde_cbor::Error;
 use bytes::Bytes;
 use nom::{
     bytes::complete::take,
-    number::complete::{le_u32, le_u8}, // if cbor length is actually u32
+    number::complete::le_u8, // if cbor length is actually u32
     IResult,
 };
 
@@ -27,7 +27,7 @@ impl TryFrom<&[u8]> for CatHeader {
 
     /// Attempts to decode a cat_header from a file.
     fn try_from(bytes: &[u8]) -> Result<Self, CarbonadoNodeError> {
-        let mut cat_magic_no = [0_u8; 16];
+        let cat_magic_no = [0_u8; 16];
 
         // easily get cbor_length back from header to know how far to read
         let (_, (cbor_len, metadata)) = CatHeader::parse_bytes(bytes).unwrap();
@@ -48,7 +48,7 @@ impl TryFrom<Bytes> for CatHeader {
 
     /// Attempts to decode a header from a file.
     fn try_from(bytes: Bytes) -> Result<Self, CarbonadoNodeError> {
-        let mut cat_magic_no = [0_u8; 16];
+        let cat_magic_no = [0_u8; 16];
 
         let (_, (cbor_len, metadata)) = CatHeader::parse_bytes(&bytes).unwrap();
 
@@ -75,13 +75,13 @@ impl CatHeader {
         let cbor_data = serde_cbor::to_vec(&metadata)?;
         println!("cbor data; {:?}", cbor_data);
 
-        let cbor_len = cbor_data.len() as u8;
+        let cbor_leng = cbor_data.len() as u8;
 
         // cbor length is header length
-        println!("cbor length ; {:?}", cbor_len);
+        println!("cbor length ; {:?}", cbor_leng);
 
         Ok(CatHeader {
-            cbor_len: cbor_len.into(),
+            cbor_len: cbor_leng,
             metadata: if metadata.iter().any(|b| b != &0) {
                 Some(metadata)
             } else {
