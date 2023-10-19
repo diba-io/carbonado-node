@@ -186,7 +186,7 @@ pub async fn write_catalog(
 
             move || {
                 let cat_header = CatHeader { cbor_len, metadata };
-                let _cat_header_bytes = cat_header.try_to_vec()?;
+                let cat_header_bytes = cat_header.try_to_vec()?;
 
                 trace!("Get catalogs directory path");
                 let path = file_path(volume_index, &write_pk_str, CATALOG_DIR, &name)?;
@@ -200,7 +200,7 @@ pub async fn write_catalog(
                 // WARNING; adding header to the file, breaks the test.
                 // No longer matches origonal hash
                 trace!("Write file header, should be added");
-                // file.write_all(&cat_header_bytes)?;
+                file.write_all(&cat_header_bytes)?;
 
                 trace!("Write file contents");
                 file.write_all(&contents)?;
@@ -242,6 +242,9 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
 
                 let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
                 let header = Header::try_from(&chunk_file)?;
+                debug!("");
+                debug!("XXXXXXXX   HEADER XXXXXXXX");
+                debug!("####### XxXXXXXX reading header by chunk_file {:?}", header);
 
                 let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
                     let segment_hash = segment_hash.to_string();
@@ -251,13 +254,16 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                             let write_pk_str = write_pk_str.clone();
                             let segment_hash = segment_hash.clone();
                             move || {
+                                trace!(">>>>>> XXXXX read_file() Get catalogs directory path");
                                 let path = file_path(
                                     volume_index,
                                     &write_pk_str,
                                     SEGMENT_DIR,
+                                    //&segment_hash,
                                     &format!("{}.c{}", segment_hash, NODE_FORMAT),
                                 )?;
 
+                                trace!(">>>>>> XXXXX read_file() Read segment file at {path:?}");
                                 let mut file = OpenOptions::new().read(true).open(path)?;
 
                                 let mut bytes = vec![];
@@ -301,7 +307,7 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
         })
         .boxed();
 
-    debug!("Finish read_file");
+    debug!(">>>>>> XXXXX read_file() Finish read_file");
     Ok(file_bytes)
 }
 
@@ -362,6 +368,36 @@ fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
     }
     Ok(())
 }
+
+// fn remove_dir_segements<P: AsRef<Path>>(path: P, seg_file: PathBuf) -> io::Result<()> {
+//     trace!(">>> remove_Segment_contents");
+//     for entry in fs::read_dir(path)? {
+//         let entry = entry?;
+//         trace!("ENTRY Delete SEGMENT File at {:?}", entry);
+
+//         match &entry {
+//             seg_file => {
+//                 fs::remove_file(seg_file.path())?;
+//                 trace!("Delete Segment File at {:?}", seg_file);
+//             }
+//         }
+//     }
+//     Ok(())
+// }
+
+// fn remove_dir_catalogs(path: PathBuf, file: PathBuf) -> io::Result<()> {
+//     for entry in fs::read_dir(path)? {
+//         let entry = entry?;
+//         trace!("ENTRY Delete CATALOG File at {:?}", entry);
+//         match &entry {
+//             file => {
+//                 fs::remove_file(file.path())?;
+//                 trace!("FILE MATCH Delete CATALOG File at {:?}", file);
+//             }
+//         }
+//     }
+//     Ok(())
+// }
 
 fn vec_to_array(vec: Vec<u8>) -> Option<[u8; 8]> {
     if vec.len() == 8 {

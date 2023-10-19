@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{
+    net::SocketAddr,
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, Result};
 
@@ -24,6 +28,8 @@ use crate::{
     prelude::*,
 };
 
+const SOME_THRESHOLD: i32 = 1000;
+
 async fn write_file_handler(
     pk: &str,
     mut body: BodyStream,
@@ -31,38 +37,61 @@ async fn write_file_handler(
 ) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
-    let mut buffer = Vec::new();
-
-    while let Some(chunk) = body.next().await {
-        match chunk {
-            Ok(bytes) => buffer.extend_from_slice(&bytes),
-            Err(e) => return Err(e.into()),
-        }
-    }
-    let mut is_mime_type = "get mmime_type";
-    let kind = infer::get(&buffer);
-    match kind {
-        Some(mime_type) => {
-            let mime_type = mime_type;
-            debug!("mime_type: {:?}", &mime_type.mime_type());
-            is_mime_type = mime_type.mime_type();
-        }
-        None => debug!("no mime_type found"),
-    };
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let mime_type_determined = Arc::new(Mutex::new(false));
+    let is_mime_type = Arc::new(Mutex::new("default_mime_type".to_string()));
 
     let file_stream: FileStream = stream::try_unfold(
-        (body, BytesMut::with_capacity(SEGMENT_SIZE * 2)),
-        |(mut body_stream, mut remainder)| async {
+        (
+            body,
+            BytesMut::with_capacity(SEGMENT_SIZE * 2),
+            buffer.clone(),
+            is_mime_type.clone(),
+            mime_type_determined.clone(),
+        ),
+        |(mut body_stream, mut remainder, buffer, is_mime_type, mime_type_determined)| async move {
             while remainder.len() < SEGMENT_SIZE {
                 if let Some(chunk) = body_stream.next().await {
                     let bytes = chunk?;
 
-                    remainder.extend(bytes);
+                    {
+                        let mut buffer_guard = buffer.lock().unwrap();
+                        buffer_guard.extend_from_slice(&bytes);
+                    }
 
+                    {
+                        let mut mime_determined_guard = mime_type_determined.lock().unwrap();
+                        let mut mime_guard = is_mime_type.lock().unwrap();
+
+                        if !*mime_determined_guard
+                            && buffer.lock().unwrap().len() > SOME_THRESHOLD.try_into().unwrap()
+                        {
+                            let kind = infer::get(&buffer.lock().unwrap());
+                            match kind {
+                                Some(mime) => {
+                                    debug!("mime_type: {:?}", mime.mime_type());
+                                    *mime_guard = mime.mime_type().to_string();
+                                }
+                                None => debug!("no mime_type found"),
+                            };
+                            *mime_determined_guard = true;
+                        }
+                    }
+
+                    remainder.extend(bytes);
                     if remainder.len() >= SEGMENT_SIZE {
                         let segment = remainder.split_to(SEGMENT_SIZE);
                         trace!("Stream 1MB segment");
-                        return Ok(Some((segment.freeze(), (body_stream, remainder))));
+                        return Ok(Some((
+                            segment.freeze(),
+                            (
+                                body_stream,
+                                remainder,
+                                buffer.clone(),
+                                is_mime_type.clone(),
+                                mime_type_determined.clone(),
+                            ),
+                        )));
                     }
                 } else {
                     trace!("No more segments in Body Stream");
@@ -75,7 +104,8 @@ async fn write_file_handler(
     )
     .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream, name, is_mime_type).await?;
+    let determined_mime_type = is_mime_type.lock().unwrap().clone();
+    let Blake3Hash(hash) = write_file(pk, file_stream, name, &determined_mime_type).await?;
 
     Ok(hash.to_hex().to_string())
 }

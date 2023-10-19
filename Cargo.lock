@@ -298,6 +298,7 @@ dependencies = [
  "hex",
  "infer",
  "log",
+ "mime",
  "nom 7.1.3",
  "once_cell",
  "par-stream",
