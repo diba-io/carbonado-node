@@ -1,8 +1,4 @@
-use std::{
-    net::SocketAddr,
-    str::FromStr,
-    sync::{Arc, Mutex},
-};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::{anyhow, Result};
 
@@ -28,11 +24,7 @@ use crate::{
     prelude::*,
 };
 
-async fn write_file_handler(
-    pk: &str,
-    mut body: BodyStream,
-    name: Option<String>,
-) -> Result<String> {
+async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
     let is_mime_type = "default_mime_type".to_string();
@@ -51,7 +43,7 @@ async fn write_file_handler(
                     let mut buffer = Vec::new();
                     buffer.extend_from_slice(&bytes);
 
-                    is_mime_type = "test_mime_type".to_string();
+                    // is_mime_type = "test_mime_type".to_string();
 
                     let kind = infer::get(&buffer); // Use the extended buffer here
                     match kind {
@@ -84,7 +76,7 @@ async fn write_file_handler(
     )
     .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream, name, "is_mime_type").await?;
+    let Blake3Hash(hash) = write_file(pk, file_stream, name, &is_mime_type).await?;
 
     Ok(hash.to_hex().to_string())
 }

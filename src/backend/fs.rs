@@ -186,7 +186,7 @@ pub async fn write_catalog(
 
             move || {
                 let cat_header = CatHeader { cbor_len, metadata };
-                let cat_header_bytes = cat_header.try_to_vec()?;
+                let _cat_header_bytes = cat_header.try_to_vec()?;
 
                 trace!("Get catalogs directory path");
                 let path = file_path(volume_index, &write_pk_str, CATALOG_DIR, &name)?;
