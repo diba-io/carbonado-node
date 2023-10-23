@@ -33,7 +33,6 @@ pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
     name: Option<String>,
-    mime_type: &str,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
