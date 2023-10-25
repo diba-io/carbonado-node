@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Error, Result};
-use axum::{body::Bytes, extract::BodyStream};
+use axum::body::Bytes;
 use bytes::BytesMut;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
 use chrono::{NaiveDateTime, TimeZone, Utc};
@@ -56,8 +56,8 @@ pub async fn write_file<'a>(
 
     // let is_mime_type = is_mime_type.clone();
 
-    let segment_hashes: Vec<(BaoHash, String)> = file_stream
-        .try_par_then(None, move |(segment, (_, _, mime_type))| {
+    let segment_hashes: Vec<(BaoHash, (BodyStream, BytesMut, String))> = file_stream
+        .try_par_then(None, move |(segment:Bytes, (_, _, mime_type))| {
             // If you need to pass additional information, create a new struct or tuple
             //let additional_data = (body_stream.clone(), remainder.clone(), is_mime_type.clone());
             let segment = segment.clone();
