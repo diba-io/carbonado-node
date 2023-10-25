@@ -24,16 +24,18 @@ use crate::{
     prelude::*,
 };
 
-async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
+pub async fn write_file_handler(
+    pk: &str,
+    body: BodyStream,
+    name: Option<String>,
+) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
-
-    let is_mime_type = "default_mime_type".to_string();
 
     let file_stream: FileStream = stream::try_unfold(
         (
             body,
             BytesMut::with_capacity(SEGMENT_SIZE * 2),
-            is_mime_type.clone(),
+            "default_mime_type".to_string(),
         ),
         |(mut body_stream, mut remainder, mut is_mime_type)| async move {
             while remainder.len() < SEGMENT_SIZE {
@@ -43,17 +45,13 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
                     let mut buffer = Vec::new();
                     buffer.extend_from_slice(&bytes);
 
-                    // is_mime_type = "test_mime_type".to_string();
-
                     let kind = infer::get(&buffer); // Use the extended buffer here
-                    match kind {
-                        Some(mime_type) => {
-                            is_mime_type = mime_type.mime_type().to_string();
-                        }
-                        None => debug!("no mime_type found"),
+                    let mime_type = match kind {
+                        Some(mime_type) => mime_type.mime_type().to_string(),
+                        None => "application/octet-stream".to_string(),
                     };
 
-                    debug!(">>>>>>>>>>>> PASS TO TUPLE MIME_TYPE {}", &is_mime_type);
+                    debug!(">>>>>>>>>>>> PASS TO TUPLE MIME_TYPE {}", &mime_type);
 
                     remainder.extend(bytes);
 
@@ -62,7 +60,7 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
                         trace!("Stream 1MB segment");
                         return Ok(Some((
                             segment.freeze(),
-                            (body_stream, remainder, is_mime_type),
+                            (body_stream, remainder, mime_type.clone()), // Pass mime_type here
                         )));
                     }
                 } else {
@@ -76,7 +74,7 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
     )
     .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream, name, &is_mime_type).await?;
+    let Blake3Hash(hash) = write_file(pk, file_stream, name).await?;
 
     Ok(hash.to_hex().to_string())
 }

@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Error, Result};
-use axum::body::Bytes;
+use axum::{body::Bytes, extract::BodyStream};
 use bytes::BytesMut;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
 use chrono::{NaiveDateTime, TimeZone, Utc};
@@ -49,13 +49,24 @@ pub async fn write_file<'a>(
         &x_only_pk.serialize(),
     )));
 
+    //let is_mime_type = Arc::new(Mutex::new("mim_type_is?"));
+
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
-    let segment_hashes: Vec<BaoHash> = file_stream
-        .try_par_then(None, move |segment: Bytes| {
+    // let is_mime_type = is_mime_type.clone();
+
+    let segment_hashes: Vec<(BaoHash, String)> = file_stream
+        .try_par_then(None, move |(segment, (_, _, mime_type))| {
+            // If you need to pass additional information, create a new struct or tuple
+            //let additional_data = (body_stream.clone(), remainder.clone(), is_mime_type.clone());
+            let segment = segment.clone();
+            let mime_type = mime_type.clone();
+
             trace!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
+            //let is_mime_type = is_mime_type.clone();
+
             async move {
                 thread_file_hasher.lock().await.update(&segment);
                 trace!("Encoding segment");
@@ -64,11 +75,29 @@ pub async fn write_file<'a>(
                 let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
                 trace!("Segment hash: {segment_hash}");
 
-                Ok::<BaoHash, Error>(segment_hash)
+                // Extract the mime_type from the result here
+                // let mime_type = match result {
+                //     Ok(Some((_, (_, _, mime_type)))) => mime_type,
+                //     _ => "application/octet-stream".to_string(),
+                // };
+
+                Ok::<(BaoHash, String), Error>((segment_hash, mime_type))
             }
         })
         .try_collect()
         .await?;
+
+    // Extract mime_type values from segment_hashes
+    // let mime_types: Vec<String> = segment_hashes
+    //     .iter()
+    //     .map(|(_, mime_type)| mime_type.clone())
+    //     .collect();
+
+    // Convert the reference to a slice of tuples into a reference to a slice of BaoHash
+    let seg_hashes: &[BaoHash] = &segment_hashes
+        .iter()
+        .map(|(bao_hash, _)| bao_hash)
+        .collect::<Vec<&BaoHash>>()[..];
 
     let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
 
@@ -82,7 +111,7 @@ pub async fn write_file<'a>(
     }
 
     trace!("Append each hash to its catalog");
-    write_catalog(&write_pk_str, &file_hash, name, mime_type, &segment_hashes).await?;
+    write_catalog(&write_pk_str, &file_hash, name, "mime_type", seg_hashes).await?;
 
     debug!("Finished write_file");
     Ok(file_hash)

@@ -3,6 +3,8 @@ use std::{
     str::FromStr,
 };
 
+use axum::extract::BodyStream;
+use bytes::BytesMut;
 use serde::{Deserialize, Serialize};
 
 use anyhow::{Error, Result};
@@ -17,6 +19,31 @@ impl fmt::Display for Blake3Hash {
         f.write_str(&hash.to_string())
     }
 }
+
+// ub struct BaoHashExt {
+//     pub hash: bao::Hash,
+//     pub other_data: (BodyStream, BytesMut, String), // Tuple containing body, BytesMut, and mime_type
+// }
+
+// impl BaoHashExt {
+//     // Extract the bao::Hash
+//     pub fn get_hash(&self) -> &bao::Hash {
+//         &self.hash
+//     }
+
+//     // Extract the String field from the tuple
+//     pub fn get_mime_type(&self) -> &str {
+//         &self.other_data.2
+//     }
+// }
+
+// impl fmt::Display for BaoHashExt {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         let Self(hash) = self;
+
+//         f.write_str(&hash.to_string())
+//     }
+// }p
 
 #[derive(Clone, Debug)]
 pub struct BaoHash(pub bao::Hash);
