@@ -137,6 +137,50 @@ pub async fn start() -> Result<()> {
         .route("/store_named/:pk/:name", post(post_file_named))
         .route("/retrieve/:pk/:blake3_hash", get(get_file))
         .route("/retrieve_named/:pk/:name", get(get_file_named))
+        // POST
+        .route("/public/hashed/file", post(post_public_hashed_file))
+        .route("/public/hashed/catalogs", post(post_public_hashed_catalogs))
+        .route("/public/hashed/segments", post(post_public_hashed_segments))
+        .route("/public/named/file/:name", post(post_public_named_file))
+        .route(
+            "/public/named/catalogs/:name",
+            post(post_public_named_catalogs),
+        )
+        .route(
+            "/public/named/segments/:name",
+            post(post_public_named_segments),
+        )
+        .route("/private/hashed/file", post(post_private_hashed_file))
+        .route(
+            "/private/hashed/catalogs",
+            post(post_private_hashed_catalogs),
+        )
+        .route(
+            "/private/hashed/segments",
+            post(post_private_hashed_segments),
+        )
+        .route("/private/named/file/:name", post(post_private_named_file))
+        .route(
+            "/private/named/catalogs/:name",
+            post(post_private_named_catalogs),
+        )
+        .route(
+            "/private/named/segments/:name",
+            post(post_private_named_segments),
+        )
+        // GET
+        .route("/public/hashed/file", get(get_public_hashed_file))
+        .route("/public/hashed/catalogs", get(get_public_hashed_catalogs))
+        .route("/public/hashed/segments", get(get_public_hashed_segments))
+        .route("/public/named/file", get(get_public_named_file))
+        .route("/public/named/catalogs", get(get_public_named_catalogs))
+        .route("/public/named/segments", get(get_public_named_segments))
+        .route("/private/hashed/file", get(get_private_hashed_file))
+        .route("/private/hashed/catalogs", get(get_private_hashed_catalogs))
+        .route("/private/hashed/segments", get(get_private_hashed_segments))
+        .route("/private/named/file", get(get_private_named_file))
+        .route("/private/named/catalogs", get(get_private_named_catalogs))
+        .route("/private/named/segments", get(get_private_named_segments))
         .route("/id", get(id))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))
