@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Error, Result};
-use axum::body::Bytes;
+use axum::{body::Bytes, extract::BodyStream};
 use bytes::BytesMut;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
 use chrono::{NaiveDateTime, TimeZone, Utc};
@@ -56,48 +56,46 @@ pub async fn write_file<'a>(
 
     // let is_mime_type = is_mime_type.clone();
 
-    let segment_hashes: Vec<(BaoHash, (BodyStream, BytesMut, String))> = file_stream
-        .try_par_then(None, move |(segment:Bytes, (_, _, mime_type))| {
-            // If you need to pass additional information, create a new struct or tuple
-            //let additional_data = (body_stream.clone(), remainder.clone(), is_mime_type.clone());
-            let segment = segment.clone();
-            let mime_type = mime_type.clone();
+    let segment_hashes: Vec<(BaoHash, String)> = file_stream
+    .try_par_then(None, move |result| {
+        async move {
+            let segment = match result {
+                Ok(Some((segment_bytes, (_, _, mime_type)))) => {
+                    // Assuming `segment_bytes` is of type `bytes::Bytes`, and you have a way to calculate `BaoHash`
+                    //let hash = calculate_bao_hash(&segment_bytes);
+                    let hash = &segment_bytes
+                    .iter()
+                    .map(|(bao_hash, _)| bao_hash)
+                    .collect::<Vec<&BaoHash>>()[..];
+
+                    (hash, mime_type)
+                }
+                _ => {
+                    // If there's an error or no segment, you should handle this case accordingly.
+                    // For now, I'll use placeholder values.
+                    (BaoHash::default(), "application/octet-stream".to_string())
+                }
+            }
 
             trace!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
-            //let is_mime_type = is_mime_type.clone();
 
-            async move {
-                thread_file_hasher.lock().await.update(&segment);
-                trace!("Encoding segment");
-                let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
-                trace!("Writing segment");
-                let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
-                trace!("Segment hash: {segment_hash}");
+            thread_file_hasher.lock().await.update(&segment.0); // Use segment.0 here since segment is a tuple
 
-                // Extract the mime_type from the result here
-                // let mime_type = match result {
-                //     Ok(Some((_, (_, _, mime_type)))) => mime_type,
-                //     _ => "application/octet-stream".to_string(),
-                // };
+            trace!("Encoding segment");
+            let encoded_segment = carbonado::encode(&pk_bytes, &segment.0, NODE_FORMAT)?;
+            trace!("Writing segment");
+            let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
+            trace!("Segment hash: {segment_hash}");
 
-                Ok::<(BaoHash, String), Error>((segment_hash, mime_type))
-            }
-        })
-        .try_collect()
-        .await?;
+            // Extract the mime_type from the result here
+            let mime_type = segment.1; // Access the mime_type from the tuple
 
-    // Extract mime_type values from segment_hashes
-    // let mime_types: Vec<String> = segment_hashes
-    //     .iter()
-    //     .map(|(_, mime_type)| mime_type.clone())
-    //     .collect();
-
-    // Convert the reference to a slice of tuples into a reference to a slice of BaoHash
-    let seg_hashes: &[BaoHash] = &segment_hashes
-        .iter()
-        .map(|(bao_hash, _)| bao_hash)
-        .collect::<Vec<&BaoHash>>()[..];
+            Ok::<(BaoHash, (_, _, String)), Error>((segment_hash, mime_type))
+        }
+    })
+    .try_collect()
+    .await?;
 
     let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
 
