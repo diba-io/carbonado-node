@@ -57,45 +57,32 @@ pub async fn write_file<'a>(
     // let is_mime_type = is_mime_type.clone();
 
     let segment_hashes: Vec<(BaoHash, String)> = file_stream
-    .try_par_then(None, move |result| {
-        async move {
-            let segment = match result {
-                Ok(Some((segment_bytes, (_, _, mime_type)))) => {
-                    // Assuming `segment_bytes` is of type `bytes::Bytes`, and you have a way to calculate `BaoHash`
-                    //let hash = calculate_bao_hash(&segment_bytes);
-                    let hash = &segment_bytes
-                    .iter()
-                    .map(|(bao_hash, _)| bao_hash)
-                    .collect::<Vec<&BaoHash>>()[..];
+        .try_par_then(None, move |result| {
+            async move {
+                let (segment_bytes:Binary, mime_type) = match result {
+                    Ok(Some((segment_bytes, (_, _, mime_type)))) => (segment_bytes, mime_type),
+                    _ => {
+                        // If there's an error or no segment.
+                        ("bytes", "bytes")
+                    }
+                };
 
-                    (hash, mime_type)
-                }
-                _ => {
-                    // If there's an error or no segment, you should handle this case accordingly.
-                    // For now, I'll use placeholder values.
-                    (BaoHash::default(), "application/octet-stream".to_string())
-                }
+                trace!("Process segment");
+                let thread_file_hasher = thread_file_hasher.clone();
+
+                thread_file_hasher.lock().await.update(&segment_bytes);
+
+                trace!("Encoding segment");
+                let encoded_segment = carbonado::encode(&pk_bytes, &segment_bytes, NODE_FORMAT)?;
+                trace!("Writing segment");
+                let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
+                trace!("Segment hash: {segment_hash}");
+
+                Ok::<(BaoHash, String), Error>((segment_hash, mime_type.to_string()))
             }
-
-            trace!("Process segment");
-            let thread_file_hasher = thread_file_hasher.clone();
-
-            thread_file_hasher.lock().await.update(&segment.0); // Use segment.0 here since segment is a tuple
-
-            trace!("Encoding segment");
-            let encoded_segment = carbonado::encode(&pk_bytes, &segment.0, NODE_FORMAT)?;
-            trace!("Writing segment");
-            let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
-            trace!("Segment hash: {segment_hash}");
-
-            // Extract the mime_type from the result here
-            let mime_type = segment.1; // Access the mime_type from the tuple
-
-            Ok::<(BaoHash, (_, _, String)), Error>((segment_hash, mime_type))
-        }
-    })
-    .try_collect()
-    .await?;
+        })
+        .try_collect()
+        .await?;
 
     let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
 
@@ -108,8 +95,18 @@ pub async fn write_file<'a>(
         return Err(anyhow!("This file already exists for this public key."));
     }
 
+    let final_mime_type = &segment_hashes
+        .iter()
+        .map(|(_, mime_type)| mime_type)
+        .collect::<String>();
+
+    let seg_hashes = &segment_hashes
+        .iter()
+        .map(|(bao_hash, _)| bao_hash)
+        .collect::<Vec<&BaoHash>>()[..];
+
     trace!("Append each hash to its catalog");
-    write_catalog(&write_pk_str, &file_hash, name, "mime_type", seg_hashes).await?;
+    write_catalog(&write_pk_str, &file_hash, name, final_mime_type, seg_hashes).await?;
 
     debug!("Finished write_file");
     Ok(file_hash)
