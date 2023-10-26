@@ -59,11 +59,18 @@ pub async fn write_file<'a>(
     let segment_hashes: Vec<(BaoHash, String)> = file_stream
         .try_par_then(None, move |result| {
             async move {
-                let (segment_bytes:Binary, mime_type) = match result {
-                    Ok(Some((segment_bytes, (_, _, mime_type)))) => (segment_bytes, mime_type),
+                let (segment_bytes, mime_type) = match result {
+                    Ok(Some((segment_bytes, (_, _, mime_type)))) => {
+                        let hash = &segment_bytes
+                            .iter()
+                            .map(|(bao_hash, _)| bao_hash)
+                            .collect::<Vec<&BaoHash>>()[..];
+
+                        return (hash, mime_type);
+                    }
                     _ => {
-                        // If there's an error or no segment.
-                        ("bytes", "bytes")
+                        // update later
+                        ("bytes".as_bytes(), "mime_type")
                     }
                 };
 
