@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Error, Result};
-use axum::{body::Bytes, extract::BodyStream};
+use axum::body::Bytes;
 use bytes::BytesMut;
 use carbonado::{constants::Format, file::Header, structs::Encoded};
 use chrono::{NaiveDateTime, TimeZone, Utc};
@@ -33,6 +33,7 @@ pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
     name: Option<String>,
+    mime_type: &str,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
@@ -49,43 +50,28 @@ pub async fn write_file<'a>(
         &x_only_pk.serialize(),
     )));
 
-    //let is_mime_type = Arc::new(Mutex::new("mim_type_is?"));
-
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
-    // let is_mime_type = is_mime_type.clone();
+    debug!(
+        ">>>> THIS IS THE MIME_TYPE AS PASSED FROM >>> HTTP:: {}",
+        &mime_type
+    );
 
-    let segment_hashes: Vec<(BaoHash, String)> = file_stream
-        .try_par_then(None, move |result| {
+    let segment_hashes: Vec<BaoHash> = file_stream
+        .try_par_then(None, move |segment: Bytes| {
+            trace!("Process segment");
+            let thread_file_hasher = thread_file_hasher.clone();
             async move {
-                let (segment_bytes, mime_type) = match result {
-                    Ok(Some((segment_bytes, (_, _, mime_type)))) => {
-                        let hash = &segment_bytes
-                            .iter()
-                            .map(|(bao_hash, _)| bao_hash)
-                            .collect::<Vec<&BaoHash>>()[..];
-
-                        return (hash, mime_type);
-                    }
-                    _ => {
-                        // update later
-                        ("bytes".as_bytes(), "mime_type")
-                    }
-                };
-
-                trace!("Process segment");
-                let thread_file_hasher = thread_file_hasher.clone();
-
-                thread_file_hasher.lock().await.update(&segment_bytes);
+                thread_file_hasher.lock().await.update(&segment);
 
                 trace!("Encoding segment");
-                let encoded_segment = carbonado::encode(&pk_bytes, &segment_bytes, NODE_FORMAT)?;
+                let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
                 trace!("Writing segment");
                 let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
                 trace!("Segment hash: {segment_hash}");
 
-                Ok::<(BaoHash, String), Error>((segment_hash, mime_type.to_string()))
+                Ok::<BaoHash, Error>(segment_hash)
             }
         })
         .try_collect()
@@ -102,18 +88,8 @@ pub async fn write_file<'a>(
         return Err(anyhow!("This file already exists for this public key."));
     }
 
-    let final_mime_type = &segment_hashes
-        .iter()
-        .map(|(_, mime_type)| mime_type)
-        .collect::<String>();
-
-    let seg_hashes = &segment_hashes
-        .iter()
-        .map(|(bao_hash, _)| bao_hash)
-        .collect::<Vec<&BaoHash>>()[..];
-
     trace!("Append each hash to its catalog");
-    write_catalog(&write_pk_str, &file_hash, name, final_mime_type, seg_hashes).await?;
+    write_catalog(&write_pk_str, &file_hash, name, mime_type, &segment_hashes).await?;
 
     debug!("Finished write_file");
     Ok(file_hash)

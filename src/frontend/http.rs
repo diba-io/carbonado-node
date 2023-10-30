@@ -1,7 +1,11 @@
+use std::sync::Arc;
 use std::{net::SocketAddr, str::FromStr};
 
-use anyhow::{anyhow, Result};
+use tokio::sync::Mutex;
 
+use anyhow::{anyhow, Error, Result};
+
+use axum::body::Bytes;
 use axum::{
     body::StreamBody,
     extract::{BodyStream, Path},
@@ -10,8 +14,9 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+
 use bytes::BytesMut;
-use futures_util::{stream, StreamExt};
+use futures_util::StreamExt;
 use infer::{self};
 use log::{debug, info, trace};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
@@ -19,11 +24,12 @@ use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, write_file, FileStream},
+    backend::fs::{delete_file, read_file, write_file},
     config::{node_shared_secret, SYS_CFG},
     prelude::*,
 };
 
+// ...
 pub async fn write_file_handler(
     pk: &str,
     body: BodyStream,
@@ -31,50 +37,85 @@ pub async fn write_file_handler(
 ) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
-    let file_stream: FileStream = stream::try_unfold(
-        (
-            body,
-            BytesMut::with_capacity(SEGMENT_SIZE * 2),
-            "default_mime_type".to_string(),
-        ),
-        |(mut body_stream, mut remainder, mut is_mime_type)| async move {
+    let is_mime_type = Arc::new(Mutex::new("attempt_for_mime_type_is?".to_string()));
+
+    let (file_stream_result, mime_type) = tokio::join!(
+        async {
+            let mut remainder = BytesMut::with_capacity(SEGMENT_SIZE * 2);
+            let mut body_stream = body;
+            let mut buffer = Vec::new();
+            let mut file_data = Vec::new();
+
             while remainder.len() < SEGMENT_SIZE {
                 if let Some(chunk) = body_stream.next().await {
-                    let bytes = chunk?;
-
-                    let mut buffer = Vec::new();
-                    buffer.extend_from_slice(&bytes);
-
-                    let kind = infer::get(&buffer); // Use the extended buffer here
-                    let mime_type = match kind {
-                        Some(mime_type) => mime_type.mime_type().to_string(),
-                        None => "application/octet-stream".to_string(),
+                    let bytes = match chunk {
+                        Ok(bytes) => bytes,
+                        Err(_) => todo!(),
                     };
 
-                    debug!(">>>>>>>>>>>> PASS TO TUPLE MIME_TYPE {}", &mime_type);
+                    buffer.extend_from_slice(&bytes);
+
+                    let kind = infer::get(&buffer);
+                    let mime_type = {
+                        debug!("INNER Before locking is_mime_type");
+                        let mut mime_hasher_guard = is_mime_type.lock().await;
+                        debug!("INNER After locking is_mime_type");
+
+                        let calculated_mime_type = match kind {
+                            Some(mime_type) => {
+                                *mime_hasher_guard = mime_type.mime_type().to_string();
+                                mime_type.mime_type().to_string()
+                            }
+                            None => "application/octet-stream".to_string(),
+                        };
+
+                        calculated_mime_type
+                    };
+
+                    debug!(">>>>>>>>>>>>>> ================ >> FROM HTTP {}", mime_type);
 
                     remainder.extend(bytes);
 
                     if remainder.len() >= SEGMENT_SIZE {
-                        let segment = remainder.split_to(SEGMENT_SIZE);
-                        trace!("Stream 1MB segment");
-                        return Ok(Some((
-                            segment.freeze(),
-                            (body_stream, remainder, mime_type.clone()), // Pass mime_type here
-                        )));
+                        let segment = buffer[0..SEGMENT_SIZE].to_vec();
+                        file_data.push(Bytes::from(segment));
+                        buffer = buffer[SEGMENT_SIZE..].to_vec();
                     }
                 } else {
                     trace!("No more segments in Body Stream");
-                    return Ok(None);
+                    return Ok::<Option<Vec<Bytes>>, Error>(None);
                 }
             }
             trace!("Unexpected while short-circuit");
-            Ok(None)
-        },
-    )
-    .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream, name).await?;
+            Ok(Some(file_data))
+        },
+        async {
+            let mime_type;
+            {
+                let mime_hasher_guard = is_mime_type.lock().await;
+                mime_type = mime_hasher_guard.clone();
+            }
+
+            let mime_type = mime_type.as_str();
+
+            Ok::<Result<String, Error>, Error>(Ok(mime_type.to_string()))
+        }
+    );
+
+    let mime_type = mime_type?;
+    let file_data = file_stream_result?.unwrap_or_default();
+
+    let file_stream = futures_util::stream::iter(file_data.into_iter().map(Ok::<_, Error>));
+
+    let map_stream = Box::pin(file_stream).map(|vec_bytes| {
+        let bytes = vec_bytes.into_iter().flatten();
+        let collected_bytes: Vec<u8> = bytes.map(|chunk| chunk.to_be()).collect::<Vec<_>>();
+
+        Ok(Bytes::from(collected_bytes))
+    });
+
+    let Blake3Hash(hash) = write_file(pk, Box::pin(map_stream), name, &mime_type.unwrap()).await?;
 
     Ok(hash.to_hex().to_string())
 }
@@ -82,7 +123,6 @@ pub async fn write_file_handler(
 #[axum_macros::debug_handler]
 async fn post_file(
     Path(pk): Path<String>,
-
     body: BodyStream,
 ) -> Result<impl IntoResponse, AppError> {
     debug!("post_file called with {pk}");
