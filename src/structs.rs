@@ -78,7 +78,7 @@ impl Display for Lookup {
                 Hash::Blake3Bytes(_) => todo!(),
                 Hash::BaoBytes(_) => todo!(),
                 Hash::Blake3(blake3_hash) => f.write_str(&blake3_hash.to_string()),
-                Hash::Bao(_) => todo!(),
+                Hash::Bao(hash) => f.write_str(&hash.to_string()),
             },
             Lookup::Name(name) => f.write_str(name),
         }

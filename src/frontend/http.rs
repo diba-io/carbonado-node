@@ -108,11 +108,34 @@ pub async fn write_file_handler(
 
     let file_stream = futures_util::stream::iter(file_data.into_iter().map(Ok::<_, Error>));
 
+    // RETURNS ONE CHUNK
+    // let map_stream = Box::pin(file_stream).map(|vec_bytes| {
+    //     let bytes = vec_bytes.into_iter().flatten();
+    //     let collected_bytes: Vec<u8> = bytes.map(|chunk| chunk.to_be()).collect::<Vec<_>>();
+
+    //     Ok(Bytes::from(collected_bytes))
+    // });
+
+    // ATTEMPT TO RETURN MJULTIPLE CHUNKS
     let map_stream = Box::pin(file_stream).map(|vec_bytes| {
         let bytes = vec_bytes.into_iter().flatten();
-        let collected_bytes: Vec<u8> = bytes.map(|chunk| chunk.to_be()).collect::<Vec<_>>();
+        let mut collected_bytes: Vec<u8> = Vec::new();
 
-        Ok(Bytes::from(collected_bytes))
+        for chunk in bytes {
+            collected_bytes.push(chunk);
+            if collected_bytes.len() >= SEGMENT_SIZE {
+                // Emit a segment of size SEGMENT_SIZE
+                let segment = collected_bytes.drain(..SEGMENT_SIZE).collect::<Vec<u8>>();
+                return Ok(Bytes::from(segment));
+            }
+        }
+
+        // If there's any remaining data that's less than SEGMENT_SIZE, emit it
+        if !collected_bytes.is_empty() {
+            return Ok(Bytes::from(collected_bytes));
+        }
+
+        Ok(Bytes::new()) // No more data to emit
     });
 
     let Blake3Hash(hash) = write_file(pk, Box::pin(map_stream), name, &mime_type.unwrap()).await?;

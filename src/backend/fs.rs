@@ -53,10 +53,7 @@ pub async fn write_file<'a>(
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
-    debug!(
-        ">>>> THIS IS THE MIME_TYPE AS PASSED FROM >>> HTTP:: {}",
-        &mime_type
-    );
+    debug!(">>>>  MIME_TYPE FROM >>> HTTP:: {}", &mime_type);
 
     let segment_hashes: Vec<BaoHash> = file_stream
         .try_par_then(None, move |segment: Bytes| {
@@ -119,6 +116,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
                 encode_info.padding_len,
                 metadata,
             )?;
+
             let header_bytes = header.try_to_vec()?;
             let file_name = header.file_name();
 
@@ -192,7 +190,7 @@ pub async fn write_catalog(
 
             move || {
                 let cat_header = CatHeader { cbor_len, metadata };
-                let _cat_header_bytes = cat_header.try_to_vec()?;
+                let cat_header_bytes = cat_header.try_to_vec()?;
 
                 trace!("Get catalogs directory path");
                 let path = file_path(volume_index, &write_pk_str, CATALOG_DIR, &name)?;
@@ -210,10 +208,7 @@ pub async fn write_catalog(
                     .write(true)
                     .open(&path)?;
 
-                // WARNING; adding header to the file, breaks the test.
-                // No longer matches origonal hash
-                trace!("Write file header, should be added");
-                //file.write_all(&cat_header_bytes)?;
+                file.write_all(&cat_header_bytes)?;
 
                 trace!("Write file contents");
                 file.write_all(&contents)?;
@@ -230,18 +225,22 @@ pub async fn write_catalog(
 }
 
 pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
-    debug!("Read file from CATALOG by lookup: {lookup}");
+    debug!(">>>>>> Read file from CATALOG by lookup: {lookup}");
 
     trace!("Create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
 
-    trace!("Read catalog file bytes, parse out each hash, plus the segment Carbonado format");
+    trace!(
+        ">>>>>> Read catalog file bytes, parse out each hash, plus the segment Carbonado format"
+    );
     let catalog_file = read_catalog(&write_pk_str, lookup)?;
 
+    let catalog_file_clone = catalog_file.clone();
+
     trace!("For each hash, read each chunk into a segment, then decode that segment");
-    let file_bytes: FileStream = stream::iter(catalog_file)
+    let file_bytes: FileStream = stream::iter(catalog_file_clone)
         .par_then(None, move |segment_hash| {
             let write_pk_str = write_pk_str.clone();
 
@@ -325,9 +324,13 @@ pub fn read_catalog(write_pk_str: &str, lookup: &Lookup) -> Result<Vec<BaoHash>>
     let mut file = OpenOptions::new().read(true).open(path)?;
 
     let mut bytes = vec![];
+
     file.read_to_end(&mut bytes)?;
 
-    let bao_hashes = bytes
+    // Split the CatHeader bytes from the content bytes
+    let (_cat_header, content_bytes) = bytes.split_at(25);
+
+    let bao_hashes = content_bytes
         .chunks_exact(bao::HASH_SIZE)
         .map(BaoHash::try_from)
         .collect::<Result<Vec<BaoHash>>>()?;
