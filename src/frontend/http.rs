@@ -10,7 +10,7 @@ use axum::body::Bytes;
 use axum::{
     body::StreamBody,
     extract::{BodyStream, Path},
-    http::{Request, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Router,
@@ -19,7 +19,7 @@ use bytes::BytesMut;
 use futures_util::StreamExt;
 use http::Uri;
 use infer::{self};
-use log::{debug, info, trace};
+use log::{debug, info};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
 use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
@@ -59,14 +59,6 @@ pub async fn write_file_handler(
             total_bytes_read += bytes.len();
             buffer.extend_from_slice(&bytes);
 
-            // OTHER KIND BY requestURL
-            debug!(
-                ">>>>>>>>>>>>>> ================ >>  ((((((((())))))))) url {:?}",
-                &url
-            );
-
-            // KIND BY BYTES DATA
-
             let kind = infer::get(&buffer);
             let mime_type = {
                 debug!("INNER Before locking is_mime_type");
@@ -85,7 +77,7 @@ pub async fn write_file_handler(
                     let svg_check_len = std::cmp::min(buffer.len(), 1024); // Check first 1024 bytes
                     let content = std::str::from_utf8(&buffer[..svg_check_len]).unwrap_or("");
                     if content.contains("<svg") {
-                        debug!(">>>>>>>>>>>>>> ================ >>content.contains SVG ");
+                        debug!(">>>>>>>>>>>>>>>> content.contains SVG ");
 
                         calculated_mime_type = "image/svg+xml".to_string();
                     }
@@ -94,6 +86,8 @@ pub async fn write_file_handler(
                 *mime_hasher_guard = calculated_mime_type.clone();
                 calculated_mime_type
             };
+
+            debug!(">>>>>>>>>>>>>>>> mime_type {:?}", &mime_type);
 
             remainder.extend(bytes);
 
@@ -105,7 +99,7 @@ pub async fn write_file_handler(
         }
 
         if total_bytes_read == 0 {
-            // Handle the case where the file is empty
+            // Handle when file is empty
             return Ok::<Option<Vec<Bytes>>, Error>(None);
         }
 
@@ -126,11 +120,6 @@ pub async fn write_file_handler(
     let mime_type = mime_type.as_str();
 
     let file_data = file_stream_result.unwrap_or_default();
-
-    // debug!(
-    //     " FFFFFFFFFFFFFFFF FROM HERE HOW LONG IS STREAM OF file data  : file_stream_result {:?}",
-    //     &file_data.len()
-    // );
 
     let file_stream = futures_util::stream::iter(file_data.into_iter().map(Ok::<_, Error>));
 
@@ -165,7 +154,7 @@ pub async fn write_file_handler(
         Ok(Bytes::new()) // No more data to emit
     });
 
-    let Blake3Hash(hash) = write_file(pk, Box::pin(map_stream), name, &mime_type).await?;
+    let Blake3Hash(hash) = write_file(pk, Box::pin(map_stream), name, mime_type).await?;
 
     Ok(hash.to_hex().to_string())
 }
@@ -184,8 +173,8 @@ pub async fn write_file_handler(
 #[axum_macros::debug_handler]
 async fn post_file(
     Path(pk): Path<String>,
-    original_uri: OriginalUri, // This will be used directly as `http::Uri`
-    body_stream: BodyStream,   // Extractor for the body as a stream
+    original_uri: OriginalUri,
+    body_stream: BodyStream,
 ) -> Result<impl IntoResponse, AppError> {
     // Use `original_uri` directly as it's already `http::Uri`
     let request_url = original_uri.0;

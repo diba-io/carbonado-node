@@ -93,6 +93,7 @@ pub async fn write_file<'a>(
 }
 
 pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
+    debug!(">>>> ))))) >>>>> ))))))) ########## GOT HERE WITHIN WRITE SEGMENT EVEN WITH SMALL FILE <<<<<<<<<<<<<<<<<<<<<<<<");
     let Encoded(encoded_bytes, bao_hash, encode_info) = encoded;
     trace!("Encoded bytes len: {}", encoded_bytes.len());
 
@@ -116,6 +117,15 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
                 encode_info.padding_len,
                 metadata,
             )?;
+
+            debug!(
+                ">>>>>>>>>> ############# Write segment output_len is 2 chunks {:?}",
+                encode_info.output_len
+            );
+            debug!(
+                ">>>>>>>>>> ############# Write segment padding_len is 1 chunk{:?}",
+                encode_info.padding_len
+            );
 
             let header_bytes = header.try_to_vec()?;
             let file_name = header.file_name();
@@ -174,6 +184,14 @@ pub async fn write_catalog(
     let length = cbor_data.len();
     debug!("cbor lenth:::  {:?}", length);
 
+    debug!(
+        ">>>>>>>> ISSSUE VOLUME LENGTH >>>>>>>>>>>> ::::: DEUBGGING
+        SYS_CFG.volumes.len()::  {:?}",
+        SYS_CFG.volumes.len()
+    );
+
+    //stream::iter(0..SYS_CFG.volumes.len())
+
     stream::iter(0..SYS_CFG.volumes.len())
         .par_map(None, move |volume_index| {
             let write_pk_str = write_pk_str.clone();
@@ -183,6 +201,11 @@ pub async fn write_catalog(
             let cbor_len = length as u8;
             let cbor_data = cbor_data.clone();
             let metadata = Some(cbor_data.clone());
+
+            debug!(">>>>>>>>>>>> ::::: DEUBGGING cbor_len::  {cbor_len:?}");
+
+            debug!(">>>>>>>>>>>> ::::: DEUBGGING cbor_data::  {cbor_data:?}");
+            debug!(">>>>>>>>>>>> ::::: DEUBGGING metadata::  {metadata:?}");
 
             // convert to <Option[u8; 8]>
             let my_array_option: Option<[u8; 8]> = metadata.and_then(vec_to_array);
@@ -207,6 +230,30 @@ pub async fn write_catalog(
                     .create_new(true)
                     .write(true)
                     .open(&path)?;
+
+                // WARNING; adding header to the file, breaks the test.
+                // No longer matches origonal hash
+                // trace!("Write file header, should be added");
+
+                // debug!(">>>>>>>>>>>>  FROM WRITE_CATALOG  ::::: DEUBGGING cat_header_bytes::  {cat_header_bytes:?}");
+                // debug!(
+                //     ">>>>>>>>>>>>  FROM WRITE_CATALOG  ::::: DEUBGGING cat_header_bytes::LENGTH  {}",
+                //     cat_header_bytes.len()
+                // );
+
+                // debug!(">>>>>>>>>>>> FROM WRITE_CATALOG ::::: DEUBGGING contents::  {contents:?}");
+                // debug!(
+                //     ">>>>>>>>>>>> FROM WRITE_CATALOG  ::::: DEUBGGING contents::LENGTH  {}",
+                //     contents.len()
+                // );
+
+                // let concatenated_bytes = {
+                //     let cat_header_slice = cat_header_bytes.as_slice();
+                //     let contents_slice = contents.as_slice();
+                //     let mut combined = cat_header_slice.to_vec();
+                //     combined.extend_from_slice(contents_slice);
+                //     Bytes::from(combined)
+                // };
 
                 file.write_all(&cat_header_bytes)?;
 
@@ -252,11 +299,14 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                     &format!("{}.c{}", segment_hash, NODE_FORMAT),
                 )?;
 
+                debug!("###################### >>>>>>>>>>>>>>>>>>>>>> INNER CHUNK_PATH CREATED  // {:?} ", chunk_path);
+
                 let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
                 let header = Header::try_from(&chunk_file)?;
 
                 let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
                     let segment_hash = segment_hash.to_string();
+
 
                     let segment: BytesMut = stream::iter(0..SYS_CFG.volumes.len())
                         .par_map(None, move |volume_index| {
