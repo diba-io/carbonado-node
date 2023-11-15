@@ -37,7 +37,7 @@ pub async fn write_file_handler(
     pk: &str,
     body: BodyStream,
     name: Option<String>,
-    url: &Uri,
+    _url: &Uri,
 ) -> Result<String, Error> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
