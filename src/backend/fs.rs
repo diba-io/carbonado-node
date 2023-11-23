@@ -4,7 +4,10 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
+    time::Duration,
 };
+
+use tokio::sync::watch;
 
 use anyhow::{anyhow, Error, Result};
 use axum::body::Bytes;
@@ -29,11 +32,16 @@ use crate::{
 
 pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
+fn file_stream_has_data(stream: &FileStream) -> bool {
+    // Replace with actual logic to determine if the stream has data
+    true
+}
+
 pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
     name: Option<String>,
-    mime_type: &str,
+    mut mime_type_receiver: watch::Receiver<String>,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
@@ -53,10 +61,20 @@ pub async fn write_file<'a>(
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
-    debug!(">>>>  MIME_TYPE FROM >>> HTTP:: {}", &mime_type);
+    let mut current_mime_type = mime_type_receiver.borrow().clone(); // Initialize with the current value
 
     let segment_hashes: Vec<BaoHash> = file_stream
         .try_par_then(None, move |segment: Bytes| {
+            trace!(">>>>>>>>> MIME TYPE IS UPDATED");
+            // Check if the MIME type has been updated
+            if mime_type_receiver.has_changed().unwrap_or(false) {
+                let inner_current_mime_type = mime_type_receiver.borrow().clone();
+                debug!(
+                    ">>>>>>>>>>> FS >>>>>>>>>>>>> MIME type updated to: {} <<<<<<<<<<<<<<< F5 <<<<<<<<<<<<<",
+                    inner_current_mime_type
+                );
+            }
+
             trace!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
             async move {
@@ -86,14 +104,20 @@ pub async fn write_file<'a>(
     }
 
     trace!("Append each hash to its catalog");
-    write_catalog(&write_pk_str, &file_hash, name, mime_type, &segment_hashes).await?;
+    write_catalog(
+        &write_pk_str,
+        &file_hash,
+        name,
+        &current_mime_type,
+        &segment_hashes,
+    )
+    .await?;
 
     debug!("Finished write_file");
     Ok(file_hash)
 }
 
 pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
-    debug!(">>>> ))))) >>>>> ))))))) ########## GOT HERE WITHIN WRITE SEGMENT EVEN WITH SMALL FILE <<<<<<<<<<<<<<<<<<<<<<<<");
     let Encoded(encoded_bytes, bao_hash, encode_info) = encoded;
     trace!("Encoded bytes len: {}", encoded_bytes.len());
 
@@ -117,15 +141,6 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
                 encode_info.padding_len,
                 metadata,
             )?;
-
-            debug!(
-                ">>>>>>>>>> ############# Write segment output_len is 2 chunks {:?}",
-                encode_info.output_len
-            );
-            debug!(
-                ">>>>>>>>>> ############# Write segment padding_len is 1 chunk{:?}",
-                encode_info.padding_len
-            );
 
             let header_bytes = header.try_to_vec()?;
             let file_name = header.file_name();
@@ -170,6 +185,11 @@ pub async fn write_catalog(
     let date = date_utc.to_string();
     let mime_type = mime_type.to_string();
 
+    debug!(
+        ">>>>>>>>>>>>>>>>> ???? Write catalog FS MIME TYPE {}",
+        mime_type
+    );
+
     // HEADER METADATA
     let cat_data = CborData {
         name: name.to_string(),
@@ -179,18 +199,7 @@ pub async fn write_catalog(
 
     // Serialize to CBOR
     let cbor_data = serde_cbor::to_vec(&cat_data)?;
-    debug!("cbor data; {:?}", cbor_data);
-    // Important, cbor_data.length is used to adjust hash for write_read
     let length = cbor_data.len();
-    debug!("cbor lenth:::  {:?}", length);
-
-    debug!(
-        ">>>>>>>> ISSSUE VOLUME LENGTH >>>>>>>>>>>> ::::: DEUBGGING
-        SYS_CFG.volumes.len()::  {:?}",
-        SYS_CFG.volumes.len()
-    );
-
-    //stream::iter(0..SYS_CFG.volumes.len())
 
     stream::iter(0..SYS_CFG.volumes.len())
         .par_map(None, move |volume_index| {
@@ -201,11 +210,6 @@ pub async fn write_catalog(
             let cbor_len = length as u8;
             let cbor_data = cbor_data.clone();
             let metadata = Some(cbor_data.clone());
-
-            debug!(">>>>>>>>>>>> ::::: DEUBGGING cbor_len::  {cbor_len:?}");
-
-            debug!(">>>>>>>>>>>> ::::: DEUBGGING cbor_data::  {cbor_data:?}");
-            debug!(">>>>>>>>>>>> ::::: DEUBGGING metadata::  {metadata:?}");
 
             // convert to <Option[u8; 8]>
             let my_array_option: Option<[u8; 8]> = metadata.and_then(vec_to_array);
@@ -231,30 +235,6 @@ pub async fn write_catalog(
                     .write(true)
                     .open(&path)?;
 
-                // WARNING; adding header to the file, breaks the test.
-                // No longer matches origonal hash
-                // trace!("Write file header, should be added");
-
-                // debug!(">>>>>>>>>>>>  FROM WRITE_CATALOG  ::::: DEUBGGING cat_header_bytes::  {cat_header_bytes:?}");
-                // debug!(
-                //     ">>>>>>>>>>>>  FROM WRITE_CATALOG  ::::: DEUBGGING cat_header_bytes::LENGTH  {}",
-                //     cat_header_bytes.len()
-                // );
-
-                // debug!(">>>>>>>>>>>> FROM WRITE_CATALOG ::::: DEUBGGING contents::  {contents:?}");
-                // debug!(
-                //     ">>>>>>>>>>>> FROM WRITE_CATALOG  ::::: DEUBGGING contents::LENGTH  {}",
-                //     contents.len()
-                // );
-
-                // let concatenated_bytes = {
-                //     let cat_header_slice = cat_header_bytes.as_slice();
-                //     let contents_slice = contents.as_slice();
-                //     let mut combined = cat_header_slice.to_vec();
-                //     combined.extend_from_slice(contents_slice);
-                //     Bytes::from(combined)
-                // };
-
                 file.write_all(&cat_header_bytes)?;
 
                 trace!("Write file contents");
@@ -272,8 +252,6 @@ pub async fn write_catalog(
 }
 
 pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
-    debug!(">>>>>> Read file from CATALOG by lookup: {lookup}");
-
     trace!("Create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
@@ -299,14 +277,11 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                     &format!("{}.c{}", segment_hash, NODE_FORMAT),
                 )?;
 
-                debug!("###################### >>>>>>>>>>>>>>>>>>>>>> INNER CHUNK_PATH CREATED  // {:?} ", chunk_path);
-
                 let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
                 let header = Header::try_from(&chunk_file)?;
 
                 let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
                     let segment_hash = segment_hash.to_string();
-
 
                     let segment: BytesMut = stream::iter(0..SYS_CFG.volumes.len())
                         .par_map(None, move |volume_index| {
