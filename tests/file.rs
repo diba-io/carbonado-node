@@ -1,12 +1,11 @@
 use std::fs;
-use std::pin::Pin;
-//use tokio::stream::StreamExt;
+use tokio::sync::watch;
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 use axum::body::Bytes;
 use bytes::BytesMut;
 use carbonado_node::{
-    backend::fs::{read_catalog, read_file, write_file, FileStream},
+    backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
     structs::{Hash, Lookup, Secp256k1PubKey},
@@ -23,6 +22,8 @@ const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 #[tokio::test]
 async fn write_read() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
+
+    let (_mime_type_sender, mime_type_receiver) = watch::channel("init_mime_type".to_string());
 
     let (_sk, pk) = generate_keypair(&mut thread_rng());
     // TODO: Use after remove_file is finished:
@@ -47,7 +48,8 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, "mime_type_test").await?;
+    let blake3_hash =
+        write_file(&Secp256k1PubKey(pk), file_stream, None, mime_type_receiver).await?;
 
     info!("Reading file, {}", blake3_hash);
 
@@ -87,6 +89,8 @@ async fn write_read() -> Result<()> {
 async fn read_write_delete_file() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
+    let (_mime_type_sender, _mime_type_receiver) = watch::channel("init_mime_type".to_string());
+
     info!("Write Delete:: Reading file bytes");
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
@@ -100,9 +104,14 @@ async fn read_write_delete_file() -> Result<()> {
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream, None, "mime_type_test")
-        .await
-        .is_ok();
+    let file_did_write = write_file(
+        &Secp256k1PubKey(pk),
+        file_stream,
+        None,
+        _mime_type_receiver.clone(),
+    )
+    .await
+    .is_ok();
 
     if file_did_write {
         info!(
@@ -120,7 +129,7 @@ async fn read_write_delete_file() -> Result<()> {
         .boxed();
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, "mime_type_test")
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, _mime_type_receiver)
         .await
         .is_ok();
 
