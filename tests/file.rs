@@ -11,7 +11,6 @@ use carbonado_node::{
     prelude::SEGMENT_SIZE,
     structs::{Hash, Lookup, Secp256k1PubKey},
 };
-// use futures::stream::StreamExt;
 
 use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
@@ -40,10 +39,6 @@ async fn write_read() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_len);
 
     let format = FileFormat::from_bytes(&file_bytes);
-    debug!(
-        ">>>>>>>>>>>. HTTP OUTER INNER {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
-        &format.media_type()
-    );
     let stage_mime_type = format.media_type().to_string();
 
     //let mime_type = stage_mime_type;
@@ -107,10 +102,6 @@ async fn read_write_delete_file() -> Result<()> {
     debug!("{} Write Delete:: bytes read", file_bytes.len());
 
     let format = FileFormat::from_bytes(&file_bytes);
-    debug!(
-        ">>>>>>>>>>>. HTTP OUTER INNER {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
-        &format.media_type()
-    );
     let stage_mime_type = format.media_type().to_string();
 
     //let mime_type = stage_mime_type;

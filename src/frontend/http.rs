@@ -29,6 +29,14 @@ use crate::{
 async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
+    let name_clone = name.clone().unwrap();
+    let extension = name_clone.split('.').last().unwrap_or_default();
+    if extension.is_empty() {
+        debug!(">>>>>> NO EXETENSION FROM NAME {}", extension);
+    } else {
+        debug!(">>>>>> EXETENSION FROM NAME {}", extension);
+    }
+
     // Create a watch channel for MIME type updates
     let (mime_type_sender, mime_type_receiver) = watch::channel("init_mime_type".to_string());
 
@@ -48,10 +56,6 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
                     remainder.extend_from_slice(&bytes);
 
                     let format = FileFormat::from_bytes(&remainder);
-                    debug!(
-                        ">>>>>>>>>>>. HTTP OUTER INNER {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
-                        &format.media_type()
-                    );
                     let stage_mime_type = format.media_type().to_string();
 
                     //let mime_type = stage_mime_type;
@@ -59,27 +63,16 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
 
                     // Determine MIME type and store in shared state
                     if remainder.len() >= SEGMENT_SIZE {
-                        debug!(
-                            ">>>>>>>>>>>. BIG ASSED IMAGE {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
-                            remainder.len()
-                        );
-
                         let segment = remainder.split_to(SEGMENT_SIZE);
                         return Ok(Some((segment.freeze(), (body_stream, remainder))));
                     }
                 }
-                // todo HAVE TO WORK ON THE ASYNRONOUSE BEHAVIOR IS HAPPENING ON FS.RS SINCE THE MIME TYPES ARE INDEED BEING SET FOR SMALL
-                // TODO :: BUT THEY ARE NOT INTEGRATED INTO WHAT IS HAPPENING ON FS.RS FROM THE RECIEVER UPDATE, SOME KIND OF TIMING ISSUE
                 // Handle the case where the stream has ended but there's unprocessed data
                 if !remainder.is_empty() {
                     let final_chunk = remainder.split_to(remainder.len());
 
                     // Ensure MIME type is sent for the final chunk
                     let format = FileFormat::from_bytes(&final_chunk);
-                    debug!(
-                        ">>>>>>>>>>>. HTTP OUTER OUTER REAMAINDER IS EMPTY MIME TYPE {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
-                        &format.media_type()
-                    );
                     let final_mime_type = format.media_type().to_string();
                     let _ = mime_type_sender.send(final_mime_type);
 

@@ -70,16 +70,10 @@ pub async fn write_file<'a>(
 
             debug!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
+
             async move {
-
-
                 if mime_type_receiver.changed().await.is_ok() {
-                    debug!("!<<<<<<<<<<<<<<<<<<<<<<<<<<< MimeType is updated :: mime_type_receiver.has_changed");
-
                     let new_mime_type = mime_type_receiver.borrow().clone();
-
-                    debug!("<<<<<<<<<<<<<<<<<<<<<<<<<<<, NEW MIME TYPE FROM F5{} >>>>>>>>>>>>>>>>>>>>>>>>>", new_mime_type);
-
                     if new_mime_type != "application/octet-stream" {
                         *current_mime_type.lock().await = new_mime_type;
                     }
@@ -112,7 +106,7 @@ pub async fn write_file<'a>(
 
     // Access the updated MIME type after the loop
     let final_mime_type_str = current_mime_type.lock().await.clone();
-    debug!(">>>>>>>>>> F5 >>>>>>>> final_mime_type_str {final_mime_type_str:?}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>");
+    debug!(">>>>>>>>>> Mime_Type has Changed {final_mime_type_str:?}");
 
     trace!("Append each hash to its catalog");
     write_catalog(
@@ -196,10 +190,7 @@ pub async fn write_catalog(
     let date = date_utc.to_string();
     let mime_type = mime_type.to_string();
 
-    debug!(
-        ">>>>>>>>>>>>>>>>> ???? Write catalog FS MIME TYPE {}",
-        mime_type
-    );
+    debug!("Write catalog  mime_type to meda-data {}", mime_type);
 
     // HEADER METADATA
     let cat_data = CborData {

@@ -3,9 +3,6 @@ name = "carbonado-node"
 version = "0.1.0"
 edition = "2021"
 
-[profile.release]
-debug = true
-
 [[bin]]
 name = "carbonadod"
 
@@ -25,7 +22,7 @@ carbonado = "0.3.0-rc.8"
 chrono = "0.4.23"
 clap = { version = "4.1.8", features = ["derive"] }
 directories = "5.0.1"
-file-format = { version = "0.21", features = ["reader"] }
+file-format = { version = "0.21", features = ["reader-xml"] }
 flexi_logger = { version = "0.25.2", features = ["colors"] }
 flexi_syslog = "0.5.2"
 futures-util = "0.3.28"
