@@ -4,7 +4,6 @@ use std::{
     path::{Path, PathBuf},
     pin::Pin,
     sync::Arc,
-    time::Duration,
 };
 
 use tokio::sync::watch;
@@ -32,16 +31,11 @@ use crate::{
 
 pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
-fn file_stream_has_data(stream: &FileStream) -> bool {
-    // Replace with actual logic to determine if the stream has data
-    true
-}
-
 pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
     name: Option<String>,
-    mut mime_type_receiver: watch::Receiver<String>,
+    mime_type_receiver: watch::Receiver<String>,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
@@ -61,23 +55,36 @@ pub async fn write_file<'a>(
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
-    let mut current_mime_type = mime_type_receiver.borrow().clone(); // Initialize with the current value
+    let current_mime_type = Arc::new(Mutex::new(mime_type_receiver.borrow().clone()));
+
+    // Clone the receiver to avoid borrowing issues
+    let mime_type_receiver_clone = mime_type_receiver.clone();
+
+    // Clone the Arc outside the closure
+    let current_mime_type_clone = Arc::clone(&current_mime_type);
 
     let segment_hashes: Vec<BaoHash> = file_stream
         .try_par_then(None, move |segment: Bytes| {
-            trace!(">>>>>>>>> MIME TYPE IS UPDATED");
-            // Check if the MIME type has been updated
-            if mime_type_receiver.has_changed().unwrap_or(false) {
-                let inner_current_mime_type = mime_type_receiver.borrow().clone();
-                debug!(
-                    ">>>>>>>>>>> FS >>>>>>>>>>>>> MIME type updated to: {} <<<<<<<<<<<<<<< F5 <<<<<<<<<<<<<",
-                    inner_current_mime_type
-                );
-            }
+            let current_mime_type = Arc::clone(&current_mime_type_clone);
+            let mut mime_type_receiver = mime_type_receiver_clone.clone();
 
-            trace!("Process segment");
+            debug!("Process segment");
             let thread_file_hasher = thread_file_hasher.clone();
             async move {
+
+
+                if mime_type_receiver.changed().await.is_ok() {
+                    debug!("!<<<<<<<<<<<<<<<<<<<<<<<<<<< MimeType is updated :: mime_type_receiver.has_changed");
+
+                    let new_mime_type = mime_type_receiver.borrow().clone();
+
+                    debug!("<<<<<<<<<<<<<<<<<<<<<<<<<<<, NEW MIME TYPE FROM F5{} >>>>>>>>>>>>>>>>>>>>>>>>>", new_mime_type);
+
+                    if new_mime_type != "application/octet-stream" {
+                        *current_mime_type.lock().await = new_mime_type;
+                    }
+                }
+
                 thread_file_hasher.lock().await.update(&segment);
 
                 trace!("Encoding segment");
@@ -103,12 +110,16 @@ pub async fn write_file<'a>(
         return Err(anyhow!("This file already exists for this public key."));
     }
 
+    // Access the updated MIME type after the loop
+    let final_mime_type_str = current_mime_type.lock().await.clone();
+    debug!(">>>>>>>>>> F5 >>>>>>>> final_mime_type_str {final_mime_type_str:?}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<>>>>");
+
     trace!("Append each hash to its catalog");
     write_catalog(
         &write_pk_str,
         &file_hash,
         name,
-        &current_mime_type,
+        &final_mime_type_str,
         &segment_hashes,
     )
     .await?;

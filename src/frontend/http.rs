@@ -47,16 +47,45 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
 
                     remainder.extend_from_slice(&bytes);
 
+                    let format = FileFormat::from_bytes(&remainder);
+                    debug!(
+                        ">>>>>>>>>>>. HTTP OUTER INNER {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+                        &format.media_type()
+                    );
+                    let stage_mime_type = format.media_type().to_string();
+
+                    //let mime_type = stage_mime_type;
+                    let _ = mime_type_sender.send(stage_mime_type.clone());
+
                     // Determine MIME type and store in shared state
                     if remainder.len() >= SEGMENT_SIZE {
-                        let format = FileFormat::from_bytes(&remainder);
-                        let mime_type = format.media_type().to_string();
-                        let _ = mime_type_sender.send(mime_type);
+                        debug!(
+                            ">>>>>>>>>>>. BIG ASSED IMAGE {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+                            remainder.len()
+                        );
 
                         let segment = remainder.split_to(SEGMENT_SIZE);
                         return Ok(Some((segment.freeze(), (body_stream, remainder))));
                     }
                 }
+                // todo HAVE TO WORK ON THE ASYNRONOUSE BEHAVIOR IS HAPPENING ON FS.RS SINCE THE MIME TYPES ARE INDEED BEING SET FOR SMALL
+                // TODO :: BUT THEY ARE NOT INTEGRATED INTO WHAT IS HAPPENING ON FS.RS FROM THE RECIEVER UPDATE, SOME KIND OF TIMING ISSUE
+                // Handle the case where the stream has ended but there's unprocessed data
+                if !remainder.is_empty() {
+                    let final_chunk = remainder.split_to(remainder.len());
+
+                    // Ensure MIME type is sent for the final chunk
+                    let format = FileFormat::from_bytes(&final_chunk);
+                    debug!(
+                        ">>>>>>>>>>>. HTTP OUTER OUTER REAMAINDER IS EMPTY MIME TYPE {} <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+                        &format.media_type()
+                    );
+                    let final_mime_type = format.media_type().to_string();
+                    let _ = mime_type_sender.send(final_mime_type);
+
+                    return Ok(Some((final_chunk.freeze(), (body_stream, BytesMut::new()))));
+                }
+
                 Ok(None)
             }
         },
@@ -68,14 +97,6 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
 
     Ok(hash.to_hex().to_string())
 }
-
-// // Helper function to determine MIME type
-// async fn determine_mime_type(bytes: &[u8]) -> &str {
-//     let mime_type = FileFormat::from_bytes(bytes).media_type();
-//     mime_type
-//     // Logic to determine MIME type
-//     // "application/octet-stream" // Placeholder, replace with actual logic
-// }
 
 #[axum_macros::debug_handler]
 async fn post_file(
