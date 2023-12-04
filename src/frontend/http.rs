@@ -1,4 +1,6 @@
+use std::sync::Arc;
 use std::{net::SocketAddr, str::FromStr};
+use tokio::sync::watch;
 
 use anyhow::{anyhow, Result};
 use axum::{
@@ -10,8 +12,10 @@ use axum::{
     Router,
 };
 use bytes::BytesMut;
+use file_format::FileFormat;
+
 use futures_util::{stream, StreamExt};
-use log::{debug, info, trace};
+use log::{debug, info};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
 use secp256k1::PublicKey;
 use tower_http::cors::CorsLayer;
@@ -25,31 +29,64 @@ use crate::{
 async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
+    let name_clone = name.clone().unwrap();
+    let extension = name_clone.split('.').last().unwrap_or_default();
+    if extension.is_empty() {
+        debug!(">>>>>> NO EXETENSION FROM NAME {}", extension);
+    } else {
+        debug!(">>>>>> EXETENSION FROM NAME {}", extension);
+    }
+
+    // Create a watch channel for MIME type updates
+    let (mime_type_sender, mime_type_receiver) = watch::channel("init_mime_type".to_string());
+
+    // Wrap the sender in an Arc
+    let mime_type_sender = Arc::new(mime_type_sender);
+
+    // Process the file stream and determine the MIME type
     let file_stream: FileStream = stream::try_unfold(
         (body, BytesMut::with_capacity(SEGMENT_SIZE * 2)),
-        |(mut body_stream, mut remainder)| async {
-            while remainder.len() < SEGMENT_SIZE {
-                if let Some(chunk) = body_stream.next().await {
+        move |(mut body_stream, mut remainder)| {
+            let mime_type_sender = mime_type_sender.clone();
+            async move {
+                // Stream processing logic...
+                while let Some(chunk) = body_stream.next().await {
                     let bytes = chunk?;
-                    remainder.extend(bytes);
 
+                    remainder.extend_from_slice(&bytes);
+
+                    let format = FileFormat::from_bytes(&remainder);
+                    let stage_mime_type = format.media_type().to_string();
+
+                    //let mime_type = stage_mime_type;
+                    let _ = mime_type_sender.send(stage_mime_type.clone());
+
+                    // Determine MIME type and store in shared state
                     if remainder.len() >= SEGMENT_SIZE {
                         let segment = remainder.split_to(SEGMENT_SIZE);
-                        trace!("Stream 1MB segment");
                         return Ok(Some((segment.freeze(), (body_stream, remainder))));
                     }
-                } else {
-                    trace!("No more segments in Body Stream");
-                    return Ok(None);
                 }
+                // Handle the case where the stream has ended but there's unprocessed data
+                if !remainder.is_empty() {
+                    let final_chunk = remainder.split_to(remainder.len());
+
+                    // Ensure MIME type is sent for the final chunk
+                    let format = FileFormat::from_bytes(&final_chunk);
+                    let final_mime_type = format.media_type().to_string();
+                    let _ = mime_type_sender.send(final_mime_type);
+
+                    return Ok(Some((final_chunk.freeze(), (body_stream, BytesMut::new()))));
+                }
+
+                Ok(None)
             }
-            trace!("Unexpected while short-circuit");
-            Ok(None)
         },
     )
     .boxed();
 
-    let Blake3Hash(hash) = write_file(pk, file_stream, name).await?;
+    // Call write_file with the receiver part of the channel
+    let Blake3Hash(hash) = write_file(pk, file_stream, name, mime_type_receiver).await?;
 
     Ok(hash.to_hex().to_string())
 }

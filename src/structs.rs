@@ -3,6 +3,8 @@ use std::{
     str::FromStr,
 };
 
+use serde::{Deserialize, Serialize};
+
 use anyhow::{Error, Result};
 
 #[derive(Clone, Debug)]
@@ -76,7 +78,7 @@ impl Display for Lookup {
                 Hash::Blake3Bytes(_) => todo!(),
                 Hash::BaoBytes(_) => todo!(),
                 Hash::Blake3(blake3_hash) => f.write_str(&blake3_hash.to_string()),
-                Hash::Bao(_) => todo!(),
+                Hash::Bao(hash) => f.write_str(&hash.to_string()),
             },
             Lookup::Name(name) => f.write_str(name),
         }
@@ -120,4 +122,14 @@ impl Secp256k1PubKey {
 pub enum PubKey {
     Secp256k1Bytes(Box<[u8]>),
     Secp256k1(secp256k1::PublicKey),
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+
+pub struct CborData {
+    /// Number of bytes added to pad to align zfec chunks and bao slices.
+    pub name: String,
+    pub date: String,
+    pub mime_type: String,
+    // pub metadata: Option<Vec<u8>>,
 }

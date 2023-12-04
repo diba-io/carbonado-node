@@ -1,4 +1,6 @@
+use file_format::FileFormat;
 use std::fs;
+use tokio::sync::watch;
 
 use anyhow::Result;
 use axum::body::Bytes;
@@ -9,6 +11,7 @@ use carbonado_node::{
     prelude::SEGMENT_SIZE,
     structs::{Hash, Lookup, Secp256k1PubKey},
 };
+
 use futures_util::{stream, StreamExt, TryStreamExt};
 use log::{debug, info};
 use rand::thread_rng;
@@ -19,6 +22,8 @@ const RUST_LOG: &str = "carbonado_node=trace,carbonado=trace,file=trace";
 #[tokio::test]
 async fn write_read() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
+
+    let (mime_type_sender, mime_type_receiver) = watch::channel("init_mime_type".to_string());
 
     let (_sk, pk) = generate_keypair(&mut thread_rng());
     // TODO: Use after remove_file is finished:
@@ -33,6 +38,12 @@ async fn write_read() -> Result<()> {
     let file_len = file_bytes.len();
     debug!("{} Write Delete:: bytes read", file_len);
 
+    let format = FileFormat::from_bytes(&file_bytes);
+    let stage_mime_type = format.media_type().to_string();
+
+    //let mime_type = stage_mime_type;
+    let _ = mime_type_sender.send(stage_mime_type.clone());
+
     info!("Writing file");
 
     let (x_only, _) = write_pk.x_only_public_key();
@@ -43,9 +54,10 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None).await?;
+    let blake3_hash =
+        write_file(&Secp256k1PubKey(pk), file_stream, None, mime_type_receiver).await?;
 
-    info!("Reading file");
+    info!("Reading file, {}", blake3_hash);
 
     let decoded_file: Vec<u8> = read_file(
         &Secp256k1PubKey(pk),
@@ -83,9 +95,17 @@ async fn write_read() -> Result<()> {
 async fn read_write_delete_file() -> Result<()> {
     carbonado::utils::init_logging(RUST_LOG);
 
+    let (mime_type_sender, mime_type_receiver) = watch::channel("init_mime_type".to_string());
+
     info!("Write Delete:: Reading file bytes");
     let file_bytes = fs::read("tests/samples/cat.gif")?;
     debug!("{} Write Delete:: bytes read", file_bytes.len());
+
+    let format = FileFormat::from_bytes(&file_bytes);
+    let stage_mime_type = format.media_type().to_string();
+
+    //let mime_type = stage_mime_type;
+    let _ = mime_type_sender.send(stage_mime_type.clone());
 
     let file_stream = stream::iter(file_bytes.clone())
         .chunks(1024 * 1024)
@@ -96,9 +116,14 @@ async fn read_write_delete_file() -> Result<()> {
     let (_sk, pk) = generate_keypair(&mut thread_rng());
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
-    let file_did_write = write_file(&Secp256k1PubKey(pk), file_stream, None)
-        .await
-        .is_ok();
+    let file_did_write = write_file(
+        &Secp256k1PubKey(pk),
+        file_stream,
+        None,
+        mime_type_receiver.clone(),
+    )
+    .await
+    .is_ok();
 
     if file_did_write {
         info!(
@@ -116,7 +141,7 @@ async fn read_write_delete_file() -> Result<()> {
         .boxed();
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None)
+    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, mime_type_receiver)
         .await
         .is_ok();
 
