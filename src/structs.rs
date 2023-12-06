@@ -117,12 +117,18 @@ fn test_pubkey_decode() {
         "+npub14rnkcwkw0q5lnmjye7ffxvy7yxscyjl3u4mrr5qxsks76zctmz3qvuftjz",
     );
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().to_string(), "02a8e76c3ace7829f9ee44cf9293309e21a1824bf1e57631d00685a1ed0b0bd8a2");
+    assert_eq!(
+        result.unwrap().to_string(),
+        "02a8e76c3ace7829f9ee44cf9293309e21a1824bf1e57631d00685a1ed0b0bd8a2"
+    );
     let result = Secp256k1PubKey::try_from(
         "-npub14rnkcwkw0q5lnmjye7ffxvy7yxscyjl3u4mrr5qxsks76zctmz3qvuftjz",
     );
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().to_string(), "03a8e76c3ace7829f9ee44cf9293309e21a1824bf1e57631d00685a1ed0b0bd8a2");
+    assert_eq!(
+        result.unwrap().to_string(),
+        "03a8e76c3ace7829f9ee44cf9293309e21a1824bf1e57631d00685a1ed0b0bd8a2"
+    );
 }
 
 impl Display for Secp256k1PubKey {
