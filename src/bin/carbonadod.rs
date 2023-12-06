@@ -11,11 +11,18 @@ use log::error;
 enum Commands {
     /// Start storage provider node with configured frontends
     Start,
+    /// Derive the parity npub from nsec
+    ParityNpub {
+        /// Nostr secret key
+        #[arg(long)]
+        nsec: String,
+    },
 }
 
 pub async fn try_main() -> Result<()> {
     match Commands::parse() {
         Commands::Start => carbonado_node::start().await?,
+        Commands::ParityNpub { nsec } => carbonado_node::parity_npub(&nsec)?,
     }
 
     Ok(())
