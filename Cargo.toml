@@ -34,6 +34,8 @@ log = "0.4.17"
 mime = "0.3"
 mime_guess = "2.0"
 nom = "7.1.3"
+nostr = "0.25.0"
+nostr-sdk = "0.25.0"
 once_cell = "1.17.1"
 par-stream = { version = "0.10.2", features = ["runtime-tokio"] }
 percent-encoding = { version = "2.2.0", git = "https://github.com/cryptoquick/rust-url.git", branch = "addl-percent-encode-sets" }

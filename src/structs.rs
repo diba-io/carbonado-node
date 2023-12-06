@@ -3,6 +3,8 @@ use std::{
     str::FromStr,
 };
 
+use nostr_sdk::FromBech32;
+use secp256k1::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 
 use anyhow::{Error, Result};
@@ -91,10 +93,42 @@ impl TryFrom<&str> for Secp256k1PubKey {
     type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let pk = secp256k1::PublicKey::from_str(value)?;
+        let pk = match value.get(0..2).expect("key is at least 2 characters long") {
+            "+n" => secp256k1::PublicKey::from_x_only_public_key(
+                XOnlyPublicKey::from_bech32(value.get(1..).unwrap())?,
+                secp256k1::Parity::Even,
+            ),
+            "-n" => secp256k1::PublicKey::from_x_only_public_key(
+                XOnlyPublicKey::from_bech32(value.get(1..).unwrap())?,
+                secp256k1::Parity::Odd,
+            ),
+            "02" => secp256k1::PublicKey::from_str(value)?,
+            "03" => secp256k1::PublicKey::from_str(value)?,
+            _ => return Err(Error::msg("Incorrect public key format")),
+        };
 
         Ok(Self(pk))
     }
+}
+
+#[test]
+fn test_pubkey_decode() {
+    let result = Secp256k1PubKey::try_from(
+        "+npub14rnkcwkw0q5lnmjye7ffxvy7yxscyjl3u4mrr5qxsks76zctmz3qvuftjz",
+    );
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap().to_string(),
+        "02a8e76c3ace7829f9ee44cf9293309e21a1824bf1e57631d00685a1ed0b0bd8a2"
+    );
+    let result = Secp256k1PubKey::try_from(
+        "-npub14rnkcwkw0q5lnmjye7ffxvy7yxscyjl3u4mrr5qxsks76zctmz3qvuftjz",
+    );
+    assert!(result.is_ok());
+    assert_eq!(
+        result.unwrap().to_string(),
+        "03a8e76c3ace7829f9ee44cf9293309e21a1824bf1e57631d00685a1ed0b0bd8a2"
+    );
 }
 
 impl Display for Secp256k1PubKey {
