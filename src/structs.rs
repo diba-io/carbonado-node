@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use nostr_sdk::FromBech32;
+use nostr::FromBech32;
 use secp256k1::XOnlyPublicKey;
 use serde::{Deserialize, Serialize};
 
@@ -95,13 +95,21 @@ impl TryFrom<&str> for Secp256k1PubKey {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let pk = match value.get(0..2).expect("key is at least 2 characters long") {
             "+n" => secp256k1::PublicKey::from_x_only_public_key(
-                XOnlyPublicKey::from_bech32(value.get(1..).unwrap())?,
+                XOnlyPublicKey::from_slice(
+                    nostr::key::XOnlyPublicKey::from_bech32(value.get(1..).unwrap())?
+                        .serialize()
+                        .as_slice(),
+                )?, // TODO: Remove type puzzle after nostr updates to bitcoin 0.31
                 secp256k1::Parity::Even,
             ),
             "-n" => secp256k1::PublicKey::from_x_only_public_key(
-                XOnlyPublicKey::from_bech32(value.get(1..).unwrap())?,
+                XOnlyPublicKey::from_slice(
+                    nostr::key::XOnlyPublicKey::from_bech32(value.get(1..).unwrap())?
+                        .serialize()
+                        .as_slice(),
+                )?,
                 secp256k1::Parity::Odd,
-            ),
+            ), // TODO: Remove type puzzle after nostr updates to bitcoin 0.31
             "02" => secp256k1::PublicKey::from_str(value)?,
             "03" => secp256k1::PublicKey::from_str(value)?,
             _ => return Err(Error::msg("Incorrect public key format")),
