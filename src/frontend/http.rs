@@ -29,7 +29,7 @@ use crate::{
 async fn write_file_handler(pk: &str, body: Body, name: Option<String>) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
-    let name_clone = name.clone().unwrap();
+    let name_clone = name.clone().unwrap_or("Not Named".to_string());
     let extension = name_clone.split('.').last().unwrap_or_default();
     if extension.is_empty() {
         debug!(">>>>>> NO EXETENSION FROM NAME {}", extension);
