@@ -4,8 +4,8 @@ use tokio::sync::watch;
 
 use anyhow::{anyhow, Result};
 use axum::{
-    body::StreamBody,
-    extract::{BodyStream, Path},
+    body::Body,
+    extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -26,10 +26,10 @@ use crate::{
     prelude::*,
 };
 
-async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) -> Result<String> {
+async fn write_file_handler(pk: &str, body: Body, name: Option<String>) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
-    let name_clone = name.clone().unwrap();
+    let name_clone = name.clone().unwrap_or("Not Named".to_string());
     let extension = name_clone.split('.').last().unwrap_or_default();
     if extension.is_empty() {
         debug!(">>>>>> NO EXETENSION FROM NAME {}", extension);
@@ -45,7 +45,10 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
 
     // Process the file stream and determine the MIME type
     let file_stream: FileStream = stream::try_unfold(
-        (body, BytesMut::with_capacity(SEGMENT_SIZE * 2)),
+        (
+            body.into_data_stream(),
+            BytesMut::with_capacity(SEGMENT_SIZE * 2),
+        ),
         move |(mut body_stream, mut remainder)| {
             let mime_type_sender = mime_type_sender.clone();
             async move {
@@ -92,10 +95,7 @@ async fn write_file_handler(pk: &str, body: BodyStream, name: Option<String>) ->
 }
 
 #[axum_macros::debug_handler]
-async fn post_file(
-    Path(pk): Path<String>,
-    body: BodyStream,
-) -> Result<impl IntoResponse, AppError> {
+async fn post_file(Path(pk): Path<String>, body: Body) -> Result<impl IntoResponse, AppError> {
     debug!("post_file called with {pk}");
 
     let hash = write_file_handler(&pk, body, None).await?;
@@ -106,7 +106,7 @@ async fn post_file(
 #[axum_macros::debug_handler]
 async fn post_file_named(
     Path((pk, name)): Path<(String, String)>,
-    body: BodyStream,
+    body: Body,
 ) -> Result<impl IntoResponse, AppError> {
     debug!("post_file_named called with {pk}/{name}");
 
@@ -133,7 +133,7 @@ async fn get_file(
 
     let file_stream = read_file(&pk, &Lookup::Hash(Hash::Blake3(blake3_hash)))?;
 
-    Ok((StatusCode::OK, StreamBody::new(file_stream)))
+    Ok((StatusCode::OK, Body::from_stream(file_stream)))
 }
 
 #[axum_macros::debug_handler]
@@ -152,7 +152,7 @@ async fn get_file_named(
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
     let file_stream = read_file(&pk, &Lookup::Name(name))?;
 
-    Ok((StatusCode::OK, StreamBody::new(file_stream)))
+    Ok((StatusCode::OK, Body::from_stream(file_stream)))
 }
 
 #[axum_macros::debug_handler]
@@ -189,9 +189,8 @@ pub async fn start() -> Result<()> {
 
     info!("carbonado-node HTTP frontend successfully running at {addr}");
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())
 }
