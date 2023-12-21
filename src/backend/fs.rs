@@ -100,7 +100,9 @@ pub async fn write_file<'a>(
     trace!("Check catalog at {path:?}");
 
     if path.exists() {
-        return Err(anyhow!("This file already exists for this public key."));
+        return Err(anyhow!(
+            "This file already exists for this public key. Its hash is: {file_hash}"
+        ));
     }
 
     // Access the updated MIME type after the loop
