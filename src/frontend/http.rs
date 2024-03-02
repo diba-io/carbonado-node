@@ -1,6 +1,4 @@
-use std::sync::Arc;
-use std::{net::SocketAddr, str::FromStr};
-use tokio::sync::watch;
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use axum::{
@@ -13,11 +11,11 @@ use axum::{
 };
 use bytes::BytesMut;
 use file_format::FileFormat;
-
 use futures_util::{stream, StreamExt};
 use log::{debug, info};
 use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
 use secp256k1::PublicKey;
+use tokio::sync::watch;
 use tower_http::cors::CorsLayer;
 
 use crate::{
@@ -32,9 +30,9 @@ async fn write_file_handler(pk: &str, body: Body, name: Option<String>) -> Resul
     let name_clone = name.clone().unwrap_or("Not Named".to_string());
     let extension = name_clone.split('.').last().unwrap_or_default();
     if extension.is_empty() {
-        debug!(">>>>>> NO EXETENSION FROM NAME {}", extension);
+        debug!(">>>>>> NO EXTENSION FROM NAME {}", extension);
     } else {
-        debug!(">>>>>> EXETENSION FROM NAME {}", extension);
+        debug!(">>>>>> EXTENSION FROM NAME {}", extension);
     }
 
     // Create a watch channel for MIME type updates
@@ -61,7 +59,6 @@ async fn write_file_handler(pk: &str, body: Body, name: Option<String>) -> Resul
                     let format = FileFormat::from_bytes(&remainder);
                     let stage_mime_type = format.media_type().to_string();
 
-                    //let mime_type = stage_mime_type;
                     let _ = mime_type_sender.send(stage_mime_type.clone());
 
                     // Determine MIME type and store in shared state

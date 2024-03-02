@@ -45,7 +45,7 @@ impl TryFrom<&[u8]> for BaoHash {
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         let mut hash = [0_u8; 32];
         hash.copy_from_slice(&value[0..32]);
-        Ok(Self(bao::Hash::try_from(hash)?))
+        Ok(Self(bao::Hash::from(hash)))
     }
 }
 

@@ -40,16 +40,12 @@ pub async fn write_file<'a>(
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
-
     let pk_bytes = write_pk.serialize();
-    let (x_only_pk, _) = write_pk.x_only_public_key();
 
     ensure_pk_dirs_exist(&write_pk_str).await?;
 
     trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(
-        &x_only_pk.serialize(),
-    )));
+    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(&ss)));
 
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
@@ -136,7 +132,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
         .par_chunks_exact(encoded_chunk_size)
         .enumerate()
         .map(|(chunk_index, encoded_segment_chunk)| {
-            let format = Format::try_from(NODE_FORMAT)?;
+            let format = Format::from(NODE_FORMAT);
             let header = Header::new(
                 sk,
                 pk,
