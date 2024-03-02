@@ -10,7 +10,11 @@ use tokio::sync::watch;
 
 use anyhow::{anyhow, Error, Result};
 use bytes::{Bytes, BytesMut};
-use carbonado::{constants::Format, file::Header, structs::Encoded};
+use carbonado::{
+    constants::Format,
+    file::Header,
+    structs::{Encoded, Secp256k1PubKey},
+};
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 use log::{debug, trace};
