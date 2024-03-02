@@ -45,11 +45,14 @@ pub async fn write_file<'a>(
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
     let pk_bytes = write_pk.serialize();
+    let (x_only_pk, _) = write_pk.x_only_public_key();
 
     ensure_pk_dirs_exist(&write_pk_str).await?;
 
     trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(&ss)));
+    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(
+        &x_only_pk.serialize(),
+    )));
 
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
