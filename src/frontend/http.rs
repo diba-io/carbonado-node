@@ -25,16 +25,13 @@ use crate::{
     prelude::*,
 };
 
-async fn write_file_handler(pk: &str, body: Body, name: Option<String>) -> Result<String> {
+async fn write_file_handler(pk: &str, body: Body, file_name: FileName) -> Result<String> {
     let pk = &Secp256k1PubKey::try_from(pk)?;
 
-    let name_clone = name.clone().unwrap_or("Not Named".to_string());
-    let extension = name_clone.split('.').last().unwrap_or_default();
-    if extension.is_empty() {
-        debug!(">>>>>> NO EXTENSION FROM NAME {}", extension);
-    } else {
-        debug!(">>>>>> EXTENSION FROM NAME {}", extension);
-    }
+    // let extension = match file_name {
+    //     FileName::Named(name) => Some(name.split('.').last().unwrap_or_default().to_owned()),
+    //     _ => None,
+    // };
 
     // Create a watch channel for MIME type updates
     let (mime_type_sender, mime_type_receiver) = watch::channel("init_mime_type".to_string());
@@ -87,16 +84,31 @@ async fn write_file_handler(pk: &str, body: Body, name: Option<String>) -> Resul
     .boxed();
 
     // Call write_file with the receiver part of the channel
-    let Blake3Hash(hash) = write_file(pk, file_stream, name, mime_type_receiver).await?;
+    let Blake3Hash(hash) = write_file(pk, file_stream, file_name, mime_type_receiver).await?;
 
     Ok(hash.to_hex().to_string())
 }
 
 #[axum_macros::debug_handler]
-async fn post_file(Path(pk): Path<String>, body: Body) -> Result<impl IntoResponse, AppError> {
+async fn post_file_hashed(
+    Path(pk): Path<String>,
+    body: Body,
+) -> Result<impl IntoResponse, AppError> {
     debug!("post_file called with {pk}");
 
-    let hash = write_file_handler(&pk, body, None).await?;
+    let hash = write_file_handler(&pk, body, FileName::Hashed).await?;
+
+    Ok((StatusCode::OK, hash))
+}
+
+#[axum_macros::debug_handler]
+async fn post_file_pubkeyed(
+    Path(pk): Path<String>,
+    body: Body,
+) -> Result<impl IntoResponse, AppError> {
+    debug!("post_file called with {pk}");
+
+    let hash = write_file_handler(&pk, body, FileName::PubKeyed).await?;
 
     Ok((StatusCode::OK, hash))
 }
@@ -115,7 +127,7 @@ async fn post_file_named(
         return Err(AppError(StatusCode::BAD_REQUEST, anyhow!("Provided file name contains characters that have not been encoded. It should be: {reencoded}")));
     }
 
-    let hash = write_file_handler(&pk, body, Some(name)).await?;
+    let hash = write_file_handler(&pk, body, FileName::Named(name)).await?;
 
     Ok((StatusCode::OK, hash))
 }
@@ -174,10 +186,11 @@ async fn key(Path(pk): Path<String>) -> Result<impl IntoResponse, AppError> {
 pub async fn start() -> Result<()> {
     let app = Router::new()
         .route("/remove/:pk/:blake3_hash", delete(remove_file))
-        .route("/store/:pk", post(post_file))
-        .route("/store_named/:pk/:name", post(post_file_named))
-        .route("/retrieve/:pk/:blake3_hash", get(get_file))
-        .route("/retrieve_named/:pk/:name", get(get_file_named))
+        .route("/hashed/:pk", post(post_file_hashed))
+        .route("/pubkeyed/:pk", post(post_file_pubkeyed))
+        .route("/named/:pk/:name", post(post_file_named))
+        .route("/hashed/:pk/:blake3_hash", get(get_file))
+        .route("/named/:pk/:name", get(get_file_named))
         .route("/key/:pk", get(key))
         // .route("/catalog/:blake3_hash", get(get_catalog))
         // .route("/raw/:bao_hash", get(get_raw))

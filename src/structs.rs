@@ -96,3 +96,10 @@ pub struct CborData {
     pub mime_type: String,
     // pub metadata: Option<Vec<u8>>,
 }
+
+pub enum FileName {
+    Named(String),
+    PubKeyed,
+    Hashed,
+    // None,
+}
