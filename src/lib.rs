@@ -42,16 +42,11 @@ pub async fn start() -> Result<()> {
 }
 
 pub fn parity_npub(nsec: &str) -> Result<()> {
-    use nostr::{
-        secp256k1::{Parity, Secp256k1},
-        FromBech32, PublicKey, SecretKey, ToBech32,
-    };
+    use nostr::{prelude::*, secp256k1::Parity};
 
     let secret_key = SecretKey::from_bech32(nsec)?;
-    let secp = Secp256k1::new();
-    let pk = secret_key.public_key(&secp);
-    let (pk, parity) = pk.x_only_public_key();
-    let pk = PublicKey::from(pk);
+    let (xonly_public_key, parity) = secret_key.x_only_public_key(&SECP256K1);
+    let pk = PublicKey::from(xonly_public_key);
 
     println!(
         "Parity npub is: {}{}",
