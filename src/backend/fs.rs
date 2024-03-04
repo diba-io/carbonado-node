@@ -37,7 +37,7 @@ pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
-    name: Option<String>,
+    file_name: FileName,
     mime_type_receiver: watch::Receiver<String>,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
@@ -50,9 +50,10 @@ pub async fn write_file<'a>(
     ensure_pk_dirs_exist(&write_pk_str).await?;
 
     trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(
-        &x_only_pk.serialize(),
-    )));
+    let file_hasher = Arc::new(Mutex::new(match file_name {
+        FileName::PubKeyed => blake3::Hasher::new_keyed(&x_only_pk.serialize()),
+        _ => blake3::Hasher::new(),
+    }));
 
     trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
@@ -112,11 +113,17 @@ pub async fn write_file<'a>(
     let final_mime_type_str = current_mime_type.lock().await.clone();
     debug!(">>>>>>>>>> Mime_Type has Changed {final_mime_type_str:?}");
 
+    let write_pk_str = write_pk_str.to_owned();
+    let file_name = match file_name {
+        FileName::Named(name) => name,
+        FileName::PubKeyed => file_hash.to_string(),
+        FileName::Hashed => file_hash.to_string(),
+    };
+
     trace!("Append each hash to its catalog");
     write_catalog(
-        &write_pk_str,
-        &file_hash,
-        name,
+        write_pk_str,
+        file_name,
         &final_mime_type_str,
         &segment_hashes,
     )
@@ -174,9 +181,8 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
 }
 
 pub async fn write_catalog(
-    write_pk_str: &str,
-    file_hash: &Blake3Hash,
-    name: Option<String>,
+    write_pk_str: String,
+    file_name: String,
     mime_type: &str,
     segment_hashes: &[BaoHash],
 ) -> Result<()> {
@@ -186,10 +192,6 @@ pub async fn write_catalog(
         .flat_map(|bao_hash| bao_hash.to_bytes())
         .collect();
 
-    let write_pk_str = write_pk_str.to_owned();
-    let file_hash = file_hash.to_string();
-    let name = name.unwrap_or(file_hash);
-
     let date_utc = Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(61, 0).unwrap());
     let date = date_utc.to_string();
     let mime_type = mime_type.to_string();
@@ -198,7 +200,7 @@ pub async fn write_catalog(
 
     // HEADER METADATA
     let cat_data = CborData {
-        name: name.to_string(),
+        name: file_name.to_string(),
         date,
         mime_type,
     };
@@ -212,7 +214,7 @@ pub async fn write_catalog(
             let write_pk_str = write_pk_str.clone();
 
             let contents = contents.clone();
-            let name = name.clone();
+            let name = file_name.clone();
             let cbor_len = length as u8;
             let cbor_data = cbor_data.clone();
             let metadata = Some(cbor_data.clone());

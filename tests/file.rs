@@ -10,7 +10,7 @@ use carbonado_node::{
     backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
-    structs::{Hash, Lookup},
+    structs::{FileName, Hash, Lookup},
 };
 
 use futures_util::{stream, StreamExt, TryStreamExt};
@@ -58,7 +58,7 @@ async fn write_read() -> Result<()> {
     let blake3_hash = write_file(
         &Secp256k1PubKey::new(pk),
         file_stream,
-        None,
+        FileName::PubKeyed,
         mime_type_receiver,
     )
     .await?;
@@ -125,7 +125,7 @@ async fn read_write_delete_file() -> Result<()> {
     let file_did_write = write_file(
         &Secp256k1PubKey::new(pk),
         file_stream,
-        None,
+        FileName::PubKeyed,
         mime_type_receiver.clone(),
     )
     .await
@@ -150,7 +150,7 @@ async fn read_write_delete_file() -> Result<()> {
     let blake3_hash = write_file(
         &Secp256k1PubKey::new(pk),
         file_stream,
-        None,
+        FileName::PubKeyed,
         mime_type_receiver,
     )
     .await
