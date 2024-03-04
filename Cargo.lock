@@ -54,9 +54,9 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b79b82693f705137f8fb9b37871d99e4f9a7df12b917eed79c3d3954830a60b"
+checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if 1.0.0",
  "once_cell",
@@ -477,9 +477,9 @@ checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 
 [[package]]
 name = "carbonado"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2aeb8cfda5485d8a2b81e4064effa691ee5d0dd6abafb98faf8bc64f636b422"
+checksum = "3b6dec3eae07040c0b6d726f19414df8fb82a746b14cd7c78f814f59d4e605c2"
 dependencies = [
  "bao",
  "bech32 0.11.0",
@@ -981,8 +981,9 @@ dependencies = [
 
 [[package]]
 name = "flexi_syslog"
-version = "0.5.2"
-source = "git+https://github.com/cryptoquick/flexi_syslog.git#66b28399488e5753d8c2c2e6ebe00ca202e4cdc8"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e5a97f0d9b6b91e0b7095a77d03e1f216693d8d34c3827bd7b623b29cbcdb88"
 dependencies = [
  "chrono",
  "flexi_logger",
@@ -1132,9 +1133,9 @@ dependencies = [
 
 [[package]]
 name = "ghash"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d930750de5717d2dd0b8c0d42c076c0e884c81a73e6cab859bbd2339c71e3e40"
+checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
@@ -2131,9 +2132,9 @@ dependencies = [
 
 [[package]]
 name = "polyval"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d52cff9d1d4dee5fe6d03729099f4a310a41179e0a10dbf542039873f2e826fb"
+checksum = "9d1fe60d06143b2430aa532c94cfe9e29783047f06c0d7fd359a9a51b729fa25"
 dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
