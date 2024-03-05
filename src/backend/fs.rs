@@ -3,7 +3,7 @@ use std::{
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use tokio::sync::watch;
@@ -50,7 +50,7 @@ pub async fn write_file<'a>(
     ensure_pk_dirs_exist(&write_pk_str).await?;
 
     trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = Arc::new(Mutex::new(match file_name {
+    let file_hasher = Arc::new(RwLock::new(match file_name {
         FileName::PubKeyed => blake3::Hasher::new_keyed(&x_only_pk.serialize()),
         _ => blake3::Hasher::new(),
     }));
@@ -67,12 +67,19 @@ pub async fn write_file<'a>(
     let current_mime_type_clone = Arc::clone(&current_mime_type);
 
     let segment_hashes: Vec<BaoHash> = file_stream
+        .map(move |segment: Result<Bytes>| {
+            let segment = segment?;
+            thread_file_hasher
+                .write()
+                .expect("write_file write lock")
+                .update(segment.as_ref());
+            Ok(segment)
+        })
         .try_par_then(None, move |segment: Bytes| {
             let current_mime_type = Arc::clone(&current_mime_type_clone);
             let mut mime_type_receiver = mime_type_receiver_clone.clone();
 
             debug!("Process segment");
-            let thread_file_hasher = thread_file_hasher.clone();
 
             async move {
                 if mime_type_receiver.changed().await.is_ok() {
@@ -81,8 +88,6 @@ pub async fn write_file<'a>(
                         *current_mime_type.lock().await = new_mime_type;
                     }
                 }
-
-                thread_file_hasher.lock().await.update(&segment);
 
                 trace!("Encoding segment");
                 let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
@@ -96,7 +101,8 @@ pub async fn write_file<'a>(
         .try_collect()
         .await?;
 
-    let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
+    let file_hash: Blake3Hash =
+        Blake3Hash(file_hasher.read().expect("write_file read lock").finalize());
 
     trace!("Check if catalog already exists");
     let path = file_path(0, &write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
