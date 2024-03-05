@@ -54,17 +54,13 @@ pub async fn write_file<'a>(
         FileName::PubKeyed => blake3::Hasher::new_keyed(&x_only_pk.serialize()),
         _ => blake3::Hasher::new(),
     }));
-
-    trace!("Iterate through file body stream");
     let thread_file_hasher = file_hasher.clone();
 
+    trace!("Iterate through file body stream");
+
     let current_mime_type = Arc::new(Mutex::new(mime_type_receiver.borrow().clone()));
-
-    // Clone the receiver to avoid borrowing issues
     let mime_type_receiver_clone = mime_type_receiver.clone();
-
-    // Clone the Arc outside the closure
-    let current_mime_type_clone = Arc::clone(&current_mime_type);
+    let current_mime_type_clone = current_mime_type.clone();
 
     let segment_hashes: Vec<BaoHash> = file_stream
         .map(move |segment: Result<Bytes>| {
@@ -72,7 +68,7 @@ pub async fn write_file<'a>(
             thread_file_hasher
                 .write()
                 .expect("write_file write lock")
-                .update(segment.as_ref());
+                .update(&segment);
             Ok(segment)
         })
         .try_par_then(None, move |segment: Bytes| {
@@ -101,8 +97,7 @@ pub async fn write_file<'a>(
         .try_collect()
         .await?;
 
-    let file_hash: Blake3Hash =
-        Blake3Hash(file_hasher.read().expect("write_file read lock").finalize());
+    let file_hash = Blake3Hash(file_hasher.read().expect("write_file read lock").finalize());
 
     trace!("Check if catalog already exists");
     let path = file_path(0, &write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
