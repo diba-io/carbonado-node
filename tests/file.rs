@@ -5,11 +5,12 @@ use tokio::sync::watch;
 use anyhow::Result;
 use axum::body::Bytes;
 use bytes::BytesMut;
+use carbonado::structs::Secp256k1PubKey;
 use carbonado_node::{
     backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
-    structs::{Hash, Lookup, Secp256k1PubKey},
+    structs::{FileName, Hash, Lookup},
 };
 
 use futures_util::{stream, StreamExt, TryStreamExt};
@@ -54,13 +55,18 @@ async fn write_read() -> Result<()> {
         .map(|chunk| Ok(Bytes::from(chunk)))
         .boxed();
 
-    let blake3_hash =
-        write_file(&Secp256k1PubKey(pk), file_stream, None, mime_type_receiver).await?;
+    let blake3_hash = write_file(
+        &Secp256k1PubKey::new(pk),
+        file_stream,
+        FileName::PubKeyed,
+        mime_type_receiver,
+    )
+    .await?;
 
     info!("Reading file, {}", blake3_hash);
 
     let decoded_file: Vec<u8> = read_file(
-        &Secp256k1PubKey(pk),
+        &Secp256k1PubKey::new(pk),
         &Lookup::Hash(Hash::Blake3(blake3_hash.clone())),
     )?
     .try_fold(BytesMut::new(), |mut acc, chunk| async move {
@@ -117,9 +123,9 @@ async fn read_write_delete_file() -> Result<()> {
 
     // info!("Write Delete:: Writing file if not exists in order to test delete");
     let file_did_write = write_file(
-        &Secp256k1PubKey(pk),
+        &Secp256k1PubKey::new(pk),
         file_stream,
-        None,
+        FileName::PubKeyed,
         mime_type_receiver.clone(),
     )
     .await
@@ -141,9 +147,14 @@ async fn read_write_delete_file() -> Result<()> {
         .boxed();
 
     info!("Write Delete:: Writing file if not exists in order to test delete");
-    let blake3_hash = write_file(&Secp256k1PubKey(pk), file_stream, None, mime_type_receiver)
-        .await
-        .is_ok();
+    let blake3_hash = write_file(
+        &Secp256k1PubKey::new(pk),
+        file_stream,
+        FileName::PubKeyed,
+        mime_type_receiver,
+    )
+    .await
+    .is_ok();
 
     if blake3_hash {
         info!(

@@ -3,14 +3,18 @@ use std::{
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use tokio::sync::watch;
 
 use anyhow::{anyhow, Error, Result};
 use bytes::{Bytes, BytesMut};
-use carbonado::{constants::Format, file::Header, structs::Encoded};
+use carbonado::{
+    constants::Format,
+    file::Header,
+    structs::{Encoded, Secp256k1PubKey},
+};
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
 use log::{debug, trace};
@@ -33,42 +37,45 @@ pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 pub async fn write_file<'a>(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
-    name: Option<String>,
+    file_name: FileName,
     mime_type_receiver: watch::Receiver<String>,
 ) -> Result<Blake3Hash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
-
     let pk_bytes = write_pk.serialize();
     let (x_only_pk, _) = write_pk.x_only_public_key();
 
     ensure_pk_dirs_exist(&write_pk_str).await?;
 
     trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = Arc::new(Mutex::new(blake3::Hasher::new_keyed(
-        &x_only_pk.serialize(),
-    )));
-
-    trace!("Iterate through file body stream");
+    let file_hasher = Arc::new(RwLock::new(match file_name {
+        FileName::PubKeyed => blake3::Hasher::new_keyed(&x_only_pk.serialize()),
+        _ => blake3::Hasher::new(),
+    }));
     let thread_file_hasher = file_hasher.clone();
 
+    trace!("Iterate through file body stream");
+
     let current_mime_type = Arc::new(Mutex::new(mime_type_receiver.borrow().clone()));
-
-    // Clone the receiver to avoid borrowing issues
     let mime_type_receiver_clone = mime_type_receiver.clone();
-
-    // Clone the Arc outside the closure
-    let current_mime_type_clone = Arc::clone(&current_mime_type);
+    let current_mime_type_clone = current_mime_type.clone();
 
     let segment_hashes: Vec<BaoHash> = file_stream
+        .map(move |segment: Result<Bytes>| {
+            let segment = segment?;
+            thread_file_hasher
+                .write()
+                .expect("write_file write lock")
+                .update(&segment);
+            Ok(segment)
+        })
         .try_par_then(None, move |segment: Bytes| {
             let current_mime_type = Arc::clone(&current_mime_type_clone);
             let mut mime_type_receiver = mime_type_receiver_clone.clone();
 
             debug!("Process segment");
-            let thread_file_hasher = thread_file_hasher.clone();
 
             async move {
                 if mime_type_receiver.changed().await.is_ok() {
@@ -77,8 +84,6 @@ pub async fn write_file<'a>(
                         *current_mime_type.lock().await = new_mime_type;
                     }
                 }
-
-                thread_file_hasher.lock().await.update(&segment);
 
                 trace!("Encoding segment");
                 let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
@@ -92,7 +97,7 @@ pub async fn write_file<'a>(
         .try_collect()
         .await?;
 
-    let file_hash: Blake3Hash = Blake3Hash(file_hasher.lock().await.finalize());
+    let file_hash = Blake3Hash(file_hasher.read().expect("write_file read lock").finalize());
 
     trace!("Check if catalog already exists");
     let path = file_path(0, &write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
@@ -109,11 +114,17 @@ pub async fn write_file<'a>(
     let final_mime_type_str = current_mime_type.lock().await.clone();
     debug!(">>>>>>>>>> Mime_Type has Changed {final_mime_type_str:?}");
 
+    let write_pk_str = write_pk_str.to_owned();
+    let file_name = match file_name {
+        FileName::Named(name) => name,
+        FileName::PubKeyed => file_hash.to_string(),
+        FileName::Hashed => file_hash.to_string(),
+    };
+
     trace!("Append each hash to its catalog");
     write_catalog(
-        &write_pk_str,
-        &file_hash,
-        name,
+        write_pk_str,
+        file_name,
         &final_mime_type_str,
         &segment_hashes,
     )
@@ -136,7 +147,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
         .par_chunks_exact(encoded_chunk_size)
         .enumerate()
         .map(|(chunk_index, encoded_segment_chunk)| {
-            let format = Format::try_from(NODE_FORMAT)?;
+            let format = Format::from(NODE_FORMAT);
             let header = Header::new(
                 sk,
                 pk,
@@ -171,9 +182,8 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
 }
 
 pub async fn write_catalog(
-    write_pk_str: &str,
-    file_hash: &Blake3Hash,
-    name: Option<String>,
+    write_pk_str: String,
+    file_name: String,
     mime_type: &str,
     segment_hashes: &[BaoHash],
 ) -> Result<()> {
@@ -183,10 +193,6 @@ pub async fn write_catalog(
         .flat_map(|bao_hash| bao_hash.to_bytes())
         .collect();
 
-    let write_pk_str = write_pk_str.to_owned();
-    let file_hash = file_hash.to_string();
-    let name = name.unwrap_or(file_hash);
-
     let date_utc = Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(61, 0).unwrap());
     let date = date_utc.to_string();
     let mime_type = mime_type.to_string();
@@ -195,7 +201,7 @@ pub async fn write_catalog(
 
     // HEADER METADATA
     let cat_data = CborData {
-        name: name.to_string(),
+        name: file_name.to_string(),
         date,
         mime_type,
     };
@@ -209,7 +215,7 @@ pub async fn write_catalog(
             let write_pk_str = write_pk_str.clone();
 
             let contents = contents.clone();
-            let name = name.clone();
+            let name = file_name.clone();
             let cbor_len = length as u8;
             let cbor_data = cbor_data.clone();
             let metadata = Some(cbor_data.clone());
