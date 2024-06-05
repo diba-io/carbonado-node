@@ -10,7 +10,7 @@ use axum::{
     Router,
 };
 use bytes::BytesMut;
-use carbonado::structs::Secp256k1PubKey;
+use carbonado::{structs::Secp256k1PubKey, utils::BaoHash};
 use file_format::FileFormat;
 use futures_util::{stream, StreamExt};
 use log::{debug, info};

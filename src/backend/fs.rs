@@ -12,6 +12,7 @@ use carbonado::{
     constants::Format,
     file::Header,
     structs::{Encoded, Secp256k1PubKey},
+    utils::{BaoHash, BaoHasher},
 };
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
@@ -359,8 +360,8 @@ pub fn read_catalog(write_pk_str: &str, lookup: &Lookup) -> Result<Vec<BaoHash>>
 
     let bao_hashes = content_bytes
         .chunks_exact(bao::HASH_SIZE)
-        .map(BaoHash::try_from)
-        .collect::<Result<Vec<BaoHash>>>()?;
+        .map(BaoHash::from)
+        .collect::<Vec<BaoHash>>();
 
     Ok(bao_hashes)
 }

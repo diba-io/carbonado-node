@@ -5,12 +5,12 @@ use tokio::sync::watch;
 use anyhow::Result;
 use axum::body::Bytes;
 use bytes::BytesMut;
-use carbonado::structs::Secp256k1PubKey;
+use carbonado::{structs::Secp256k1PubKey, utils::BaoHasher};
 use carbonado_node::{
     backend::fs::{read_file, write_file, FileStream},
     config::node_shared_secret,
     prelude::SEGMENT_SIZE,
-    structs::{BaoHasher, FileName, Hash, Lookup},
+    structs::{FileName, Hash, Lookup},
 };
 
 use futures_util::{stream, StreamExt, TryStreamExt};

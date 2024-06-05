@@ -1,11 +1,6 @@
-use std::{
-    fmt::{self, Display},
-    io::{Cursor, Write},
-    sync::{Arc, RwLock},
-};
+use std::fmt::{self, Display};
 
-use anyhow::{Error, Result};
-use bao::encode::Encoder;
+use carbonado::utils::BaoHash;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
@@ -18,45 +13,6 @@ impl fmt::Display for Blake3Hash {
         f.write_str(&hash.to_string())
     }
 }
-
-#[derive(Clone, Debug)]
-pub struct BaoHash(pub bao::Hash);
-
-impl BaoHash {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let Self(hash) = self;
-
-        hash.as_bytes().to_vec()
-    }
-}
-
-impl fmt::Display for BaoHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self(hash) = self;
-
-        f.write_str(&hash.to_string())
-    }
-}
-
-impl TryFrom<&[u8]> for BaoHash {
-    type Error = Error;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let mut hash = [0_u8; 32];
-        hash.copy_from_slice(&value[0..32]);
-        Ok(Self(bao::Hash::from(hash)))
-    }
-}
-
-// impl AsRef<Path> for BaoHash {
-//     fn as_ref(&self) -> &Path {
-//         let Self(hash) = self;
-
-//         let hash = hash.to_string();
-
-//         Path::new(&hash).as_ref()
-//     }
-// }
 
 #[derive(Clone, Debug)]
 pub enum Hash {
@@ -106,39 +62,4 @@ pub enum FileName {
     PubKeyed,
     Hashed,
     // None,
-}
-
-pub struct BaoHasher {
-    encoder: Arc<RwLock<Encoder<Cursor<Vec<u8>>>>>,
-}
-
-impl BaoHasher {
-    pub fn new() -> Arc<Self> {
-        let data = Vec::new();
-        let cursor = Cursor::new(data.clone());
-        let encoder = Encoder::new(cursor);
-
-        let bao_hasher = Self {
-            encoder: Arc::new(RwLock::new(encoder)),
-        };
-
-        Arc::new(bao_hasher)
-    }
-
-    pub fn update(&self, buf: &[u8]) {
-        let mut encoder = self.encoder.write().expect("encoder write lock");
-        encoder.write_all(buf).expect("write to encoder");
-    }
-
-    pub fn finalize(&self) -> BaoHash {
-        let mut encoder = self.encoder.write().expect("encoder read lock");
-
-        BaoHash(encoder.finalize().expect("finalize bao hash"))
-    }
-
-    pub fn read_all(&self) -> Vec<u8> {
-        let encoder = self.encoder.write().expect("encoder read lock");
-        let data = encoder.clone().into_inner();
-        data.into_inner().to_vec()
-    }
 }
