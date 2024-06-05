@@ -1,8 +1,12 @@
-use std::fmt::{self, Display};
-
-use serde::{Deserialize, Serialize};
+use std::{
+    fmt::{self, Display},
+    io::{Cursor, Write},
+    sync::{Arc, RwLock},
+};
 
 use anyhow::{Error, Result};
+use bao::encode::Encoder;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
 pub struct Blake3Hash(pub blake3::Hash);
@@ -102,4 +106,39 @@ pub enum FileName {
     PubKeyed,
     Hashed,
     // None,
+}
+
+pub struct BaoHasher {
+    encoder: Arc<RwLock<Encoder<Cursor<Vec<u8>>>>>,
+}
+
+impl BaoHasher {
+    pub fn new() -> Arc<Self> {
+        let data = Vec::new();
+        let cursor = Cursor::new(data.clone());
+        let encoder = Encoder::new(cursor);
+
+        let bao_hasher = Self {
+            encoder: Arc::new(RwLock::new(encoder)),
+        };
+
+        Arc::new(bao_hasher)
+    }
+
+    pub fn update(&self, buf: &[u8]) {
+        let mut encoder = self.encoder.write().expect("encoder write lock");
+        encoder.write_all(buf).expect("write to encoder");
+    }
+
+    pub fn finalize(&self) -> BaoHash {
+        let mut encoder = self.encoder.write().expect("encoder read lock");
+
+        BaoHash(encoder.finalize().expect("finalize bao hash"))
+    }
+
+    pub fn read_all(&self) -> Vec<u8> {
+        let encoder = self.encoder.write().expect("encoder read lock");
+        let data = encoder.clone().into_inner();
+        data.into_inner().to_vec()
+    }
 }
