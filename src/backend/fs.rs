@@ -61,10 +61,7 @@ pub async fn write_file<'a>(
     let segment_hashes: Vec<BaoHash> = file_stream
         .map(move |segment: Result<Bytes>| {
             let segment = segment?;
-            thread_file_hasher
-                // .write()
-                // .expect("write_file write lock")
-                .update(&segment);
+            thread_file_hasher.update(&segment);
             Ok(segment)
         })
         .try_par_then(None, move |segment: Bytes| {
