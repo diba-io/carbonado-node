@@ -3,10 +3,8 @@ use std::{
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
     pin::Pin,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
-
-use tokio::sync::watch;
 
 use anyhow::{anyhow, Error, Result};
 use bytes::{Bytes, BytesMut};
@@ -14,6 +12,7 @@ use carbonado::{
     constants::Format,
     file::Header,
     structs::{Encoded, Secp256k1PubKey},
+    utils::{BaoHash, BaoHasher},
 };
 use chrono::{NaiveDateTime, TimeZone, Utc};
 use futures_util::{stream, Stream, StreamExt, TryStreamExt};
@@ -24,7 +23,7 @@ use rayon::{
     slice::ParallelSlice,
 };
 use secp256k1::{PublicKey, SecretKey};
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 
 use crate::{
     config::{ensure_pk_dirs_exist, file_path, node_shared_secret, SYS_CFG},
@@ -39,21 +38,19 @@ pub async fn write_file<'a>(
     file_stream: FileStream,
     file_name: FileName,
     mime_type_receiver: watch::Receiver<String>,
-) -> Result<Blake3Hash> {
+) -> Result<BaoHash> {
     trace!("write_file, create a shared secret using ECDH");
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
     let pk_bytes = write_pk.serialize();
-    let (x_only_pk, _) = write_pk.x_only_public_key();
+    let (_x_only_pk, _) = write_pk.x_only_public_key();
 
     ensure_pk_dirs_exist(&write_pk_str).await?;
 
-    trace!("Initialize Blake3 keyed hasher");
-    let file_hasher = Arc::new(RwLock::new(match file_name {
-        FileName::PubKeyed => blake3::Hasher::new_keyed(&x_only_pk.serialize()),
-        _ => blake3::Hasher::new(),
-    }));
+    trace!("Initialize Bao hasher");
+
+    let file_hasher = BaoHasher::new();
     let thread_file_hasher = file_hasher.clone();
 
     trace!("Iterate through file body stream");
@@ -65,10 +62,7 @@ pub async fn write_file<'a>(
     let segment_hashes: Vec<BaoHash> = file_stream
         .map(move |segment: Result<Bytes>| {
             let segment = segment?;
-            thread_file_hasher
-                .write()
-                .expect("write_file write lock")
-                .update(&segment);
+            thread_file_hasher.update(&segment);
             Ok(segment)
         })
         .try_par_then(None, move |segment: Bytes| {
@@ -97,7 +91,7 @@ pub async fn write_file<'a>(
         .try_collect()
         .await?;
 
-    let file_hash = Blake3Hash(file_hasher.read().expect("write_file read lock").finalize());
+    let file_hash = file_hasher.finalize();
 
     trace!("Check if catalog already exists");
     let path = file_path(0, &write_pk_str, CATALOG_DIR, &file_hash.to_string())?;
@@ -366,8 +360,8 @@ pub fn read_catalog(write_pk_str: &str, lookup: &Lookup) -> Result<Vec<BaoHash>>
 
     let bao_hashes = content_bytes
         .chunks_exact(bao::HASH_SIZE)
-        .map(BaoHash::try_from)
-        .collect::<Result<Vec<BaoHash>>>()?;
+        .map(BaoHash::from)
+        .collect::<Vec<BaoHash>>();
 
     Ok(bao_hashes)
 }

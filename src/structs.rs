@@ -1,8 +1,7 @@
 use std::fmt::{self, Display};
 
+use carbonado::utils::BaoHash;
 use serde::{Deserialize, Serialize};
-
-use anyhow::{Error, Result};
 
 #[derive(Clone, Debug)]
 pub struct Blake3Hash(pub blake3::Hash);
@@ -14,45 +13,6 @@ impl fmt::Display for Blake3Hash {
         f.write_str(&hash.to_string())
     }
 }
-
-#[derive(Clone, Debug)]
-pub struct BaoHash(pub bao::Hash);
-
-impl BaoHash {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let Self(hash) = self;
-
-        hash.as_bytes().to_vec()
-    }
-}
-
-impl fmt::Display for BaoHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Self(hash) = self;
-
-        f.write_str(&hash.to_string())
-    }
-}
-
-impl TryFrom<&[u8]> for BaoHash {
-    type Error = Error;
-
-    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let mut hash = [0_u8; 32];
-        hash.copy_from_slice(&value[0..32]);
-        Ok(Self(bao::Hash::from(hash)))
-    }
-}
-
-// impl AsRef<Path> for BaoHash {
-//     fn as_ref(&self) -> &Path {
-//         let Self(hash) = self;
-
-//         let hash = hash.to_string();
-
-//         Path::new(&hash).as_ref()
-//     }
-// }
 
 #[derive(Clone, Debug)]
 pub enum Hash {

@@ -70,6 +70,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(&ENV_CFG.data_cfg_file)?;
 
     cfg_file.read_to_string(&mut cfg_contents)?;

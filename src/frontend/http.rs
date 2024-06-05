@@ -10,7 +10,7 @@ use axum::{
     Router,
 };
 use bytes::BytesMut;
-use carbonado::structs::Secp256k1PubKey;
+use carbonado::{structs::Secp256k1PubKey, utils::BaoHash};
 use file_format::FileFormat;
 use futures_util::{stream, StreamExt};
 use log::{debug, info};
@@ -84,7 +84,7 @@ async fn write_file_handler(pk: &str, body: Body, file_name: FileName) -> Result
     .boxed();
 
     // Call write_file with the receiver part of the channel
-    let Blake3Hash(hash) = write_file(pk, file_stream, file_name, mime_type_receiver).await?;
+    let BaoHash(hash) = write_file(pk, file_stream, file_name, mime_type_receiver).await?;
 
     Ok(hash.to_hex().to_string())
 }
@@ -134,14 +134,14 @@ async fn post_file_named(
 
 #[axum_macros::debug_handler]
 async fn get_file(
-    Path((pk, blake3_hash)): Path<(String, String)>,
+    Path((pk, bao_hash)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, AppError> {
-    debug!("get_file called with {pk}/{blake3_hash}");
+    debug!("get_file called with {pk}/{bao_hash}");
 
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;
-    let blake3_hash = Blake3Hash(blake3::Hash::from_str(&blake3_hash)?);
+    let bao_hash = Blake3Hash(blake3::Hash::from_str(&bao_hash)?);
 
-    let file_stream = read_file(&pk, &Lookup::Hash(Hash::Blake3(blake3_hash)))?;
+    let file_stream = read_file(&pk, &Lookup::Hash(Hash::Blake3(bao_hash)))?;
 
     Ok((StatusCode::OK, Body::from_stream(file_stream)))
 }
