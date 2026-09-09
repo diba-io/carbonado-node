@@ -1,8 +1,12 @@
-use std::fmt::{self, Display};
+use std::{
+    fmt::{self, Display},
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 
 use anyhow::{Error, Result};
+use secp256k1::PublicKey;
 
 #[derive(Clone, Debug)]
 pub struct Blake3Hash(pub blake3::Hash);
@@ -84,11 +88,43 @@ impl Display for Lookup {
 
 pub enum PubKey {
     Secp256k1Bytes(Box<[u8]>),
-    Secp256k1(secp256k1::PublicKey),
+    Secp256k1(PublicKey),
+}
+
+/// Node identity: compressed secp256k1 public key.
+///
+/// Carbonado 0.7 dropped `Secp256k1PubKey` (clean break from ECIES). HTTP routes
+/// still name files by this key; encode/decode use the 32-byte ECDH secret as
+/// the Carbonado master key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Secp256k1PubKey(PublicKey);
+
+impl Secp256k1PubKey {
+    #[must_use]
+    pub fn new(pk: PublicKey) -> Self {
+        Self(pk)
+    }
+
+    #[must_use]
+    pub fn into_inner(&self) -> PublicKey {
+        self.0
+    }
+
+    #[must_use]
+    pub fn to_bytes(&self) -> [u8; 33] {
+        self.0.serialize()
+    }
+}
+
+impl TryFrom<&str> for Secp256k1PubKey {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(Self(PublicKey::from_str(value)?))
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-
 pub struct CborData {
     /// Number of bytes added to pad to align zfec chunks and bao slices.
     pub name: String,

@@ -2,7 +2,7 @@ use std::process;
 
 use anyhow::Result;
 use clap::Parser;
-use flexi_logger::{colored_detailed_format, detailed_format, AdaptiveFormat, Logger};
+use flexi_logger::{AdaptiveFormat, Logger, colored_detailed_format, detailed_format};
 use log::error;
 
 #[derive(Parser, Debug)]
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
         let handle = logger.start()?;
 
         if let Err(err) = try_main().await {
-            error!("{}", err);
+            error!("{err}");
             err.chain()
                 .skip(1)
                 .for_each(|cause| eprintln!("Error: {cause}"));
@@ -80,10 +80,10 @@ async fn main() -> Result<()> {
         let handle = logger.start()?;
 
         if let Err(err) = try_main().await {
-            error!("{}", err);
+            error!("{err}");
             err.chain()
                 .skip(1)
-                .for_each(|cause| eprintln!("Error: {}", cause));
+                .for_each(|cause| eprintln!("Error: {cause}"));
 
             handle.flush();
             process::exit(1);

@@ -42,11 +42,13 @@ pub async fn start() -> Result<()> {
 }
 
 pub fn parity_npub(nsec: &str) -> Result<()> {
-    use nostr::{prelude::*, secp256k1::Parity};
+    use nostr::prelude::*;
+    use secp256k1::Parity;
 
-    let secret_key = SecretKey::from_bech32(nsec)?;
-    let (xonly_public_key, parity) = secret_key.x_only_public_key(&SECP256K1);
-    let pk = PublicKey::from(xonly_public_key);
+    let keys = Keys::parse(nsec)?;
+    // nostr 0.44+ uses secp256k1 0.29; this crate stays on 0.28. Copy bytes.
+    let sk = secp256k1::SecretKey::from_slice(keys.secret_key().as_secret_bytes())?;
+    let (_, parity) = sk.x_only_public_key(secp256k1::SECP256K1);
 
     println!(
         "Parity npub is: {}{}",
@@ -54,7 +56,7 @@ pub fn parity_npub(nsec: &str) -> Result<()> {
             Parity::Even => '+',
             Parity::Odd => '-',
         },
-        pk.to_bech32()?
+        keys.public_key().to_bech32()?
     );
 
     Ok(())

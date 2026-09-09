@@ -11,7 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: 1.98.0
+        components: rustfmt, clippy
     - uses: Swatinem/rust-cache@v2
     - name: Build
       run: cargo build --verbose
@@ -22,7 +26,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: 1.98.0
+        components: rustfmt, clippy
     - uses: Swatinem/rust-cache@v2
     - name: Check Formatting
       run: cargo fmt --all -- --check
@@ -31,8 +39,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: 1.98.0
+        components: rustfmt, clippy
     - uses: Swatinem/rust-cache@v2
-    - uses: olix0r/cargo-action-fmt/setup@v2
     - name: Lint
-      run: cargo clippy --lib --all-features --message-format=json -- -D warnings | cargo-action-fmt
+      run: cargo clippy --all-targets --all-features -- -D warnings

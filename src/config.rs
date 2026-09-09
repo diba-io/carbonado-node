@@ -1,15 +1,15 @@
 use std::{
     env,
-    fs::{create_dir_all, OpenOptions},
+    fs::{OpenOptions, create_dir_all},
     io::{Read, Write},
     path::PathBuf,
+    sync::LazyLock,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use directories::BaseDirs;
 use log::{debug, info, trace};
-use once_cell::sync::Lazy;
-use secp256k1::{ecdh::SharedSecret, PublicKey, Secp256k1, SecretKey};
+use secp256k1::{PublicKey, Secp256k1, SecretKey, ecdh::SharedSecret};
 use serde::{Deserialize, Serialize};
 
 use crate::prelude::{CATALOG_DIR, SEGMENT_DIR};
@@ -34,7 +34,8 @@ fn init_env_cfg() -> Result<EnvCfg> {
     })
 }
 
-pub static ENV_CFG: Lazy<EnvCfg> = Lazy::new(|| init_env_cfg().expect("Initialize env config"));
+pub static ENV_CFG: LazyLock<EnvCfg> =
+    LazyLock::new(|| init_env_cfg().expect("Initialize env config"));
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Volume {
@@ -70,6 +71,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(&ENV_CFG.data_cfg_file)?;
 
     cfg_file.read_to_string(&mut cfg_contents)?;
@@ -107,7 +109,7 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
             path: base_dir.join("Carbonado").join(format!("Volume_{i}")),
         });
 
-        volumes.push(volume.to_owned());
+        volumes.push(volume);
     }
 
     let capacity = sys_cfg.capacity.unwrap_or(1_000);
@@ -134,8 +136,8 @@ pub fn init_sys_cfg() -> Result<SysCfg> {
     Ok(config)
 }
 
-pub static SYS_CFG: Lazy<SysCfg> =
-    Lazy::new(|| init_sys_cfg().expect("Failed to initialize config"));
+pub static SYS_CFG: LazyLock<SysCfg> =
+    LazyLock::new(|| init_sys_cfg().expect("Failed to initialize config"));
 
 pub fn node_shared_secret(pk: &PublicKey) -> Result<SharedSecret> {
     let ss = SharedSecret::new(pk, &SYS_CFG.private_key);
@@ -164,7 +166,7 @@ pub fn file_path(
 }
 
 pub async fn ensure_pk_dirs_exist(write_pk_str: &str) -> Result<()> {
-    use futures_util::{stream, TryStreamExt};
+    use futures_util::{TryStreamExt, stream};
     use par_stream::ParStreamExt;
     use tokio::fs::create_dir_all;
 
@@ -182,7 +184,7 @@ pub async fn ensure_pk_dirs_exist(write_pk_str: &str) -> Result<()> {
                 Ok::<(), anyhow::Error>(())
             }
         })
-        .try_collect()
+        .try_collect::<()>()
         .await?;
 
     Ok(())

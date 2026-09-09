@@ -1,28 +1,36 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use axum::{
+    Router,
     body::Body,
     extract::Path,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Router,
 };
 use bytes::BytesMut;
-use carbonado::structs::Secp256k1PubKey;
 use file_format::FileFormat;
-use futures_util::{stream, StreamExt};
+use futures_util::{StreamExt, stream};
 use log::{debug, info};
-use percent_encoding::{percent_decode_str, utf8_percent_encode, FORM};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
+
+/// [application/x-www-form-urlencoded percent-encode set](https://url.spec.whatwg.org/#application-x-www-form-urlencoded-percent-encode-set)
+/// (accessed: 2026-08-24). Same set the cryptoquick rust-url `FORM` export used.
+const FORM: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'*')
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_');
 use secp256k1::PublicKey;
 use tokio::sync::watch;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    backend::fs::{delete_file, read_file, write_file, FileStream},
-    config::{node_shared_secret, SYS_CFG},
+    backend::fs::{FileStream, delete_file, read_file, write_file},
+    config::{SYS_CFG, node_shared_secret},
     prelude::*,
+    structs::Secp256k1PubKey,
 };
 
 async fn write_file_handler(pk: &str, body: Body, file_name: FileName) -> Result<String> {
@@ -124,7 +132,12 @@ async fn post_file_named(
         utf8_percent_encode(&percent_decode_str(&name).decode_utf8()?, FORM).to_string();
 
     if name != reencoded {
-        return Err(AppError(StatusCode::BAD_REQUEST, anyhow!("Provided file name contains characters that have not been encoded. It should be: {reencoded}")));
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            anyhow!(
+                "Provided file name contains characters that have not been encoded. It should be: {reencoded}"
+            ),
+        ));
     }
 
     let hash = write_file_handler(&pk, body, FileName::Named(name)).await?;
@@ -156,7 +169,12 @@ async fn get_file_named(
         utf8_percent_encode(&percent_decode_str(&name).decode_utf8()?, FORM).to_string();
 
     if name != reencoded {
-        return Err(AppError(StatusCode::BAD_REQUEST, anyhow!("Provided file name contains characters that have not been encoded. It should be: {reencoded}")));
+        return Err(AppError(
+            StatusCode::BAD_REQUEST,
+            anyhow!(
+                "Provided file name contains characters that have not been encoded. It should be: {reencoded}"
+            ),
+        ));
     }
 
     let pk = Secp256k1PubKey::try_from(pk.as_str())?;

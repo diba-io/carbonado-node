@@ -1,13 +1,13 @@
 # do analysis of app and create recipe file
 #stage -1 generate recipie for dependencies
-FROM rust as planner
+FROM rust:1.98-bookworm as planner
 WORKDIR /app
 RUN cargo install cargo-chef
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 # stage - 2 -build our dependencies
-FROM rust as cacher
+FROM rust:1.98-bookworm as cacher
 WORKDIR /app
 RUN cargo install cargo-chef
 COPY --from=planner /app/recipe.json recipe.json
@@ -16,7 +16,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 #stage 3
 
 # use official rust docker image as builder
-FROM rust as builder
+FROM rust:1.98-bookworm as builder
 
 # Create appuser
 ENV USER=web

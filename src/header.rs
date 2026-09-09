@@ -1,14 +1,13 @@
 use crate::errors::CarbonadoNodeError;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use serde_cbor;
 use serde_cbor::Error;
 
 use bytes::Bytes;
 use nom::{
+    IResult,
     bytes::complete::take,
     number::complete::le_u8, // if cbor length is actually u32
-    IResult,
 };
 
 use crate::constants::CAT_MAGICNO;
@@ -64,21 +63,25 @@ impl TryFrom<Bytes> for CatHeader {
 
 impl CatHeader {
     /// 160 bytes should be added for Carbonado headers.
-    pub fn len() -> usize {
+    #[must_use]
+    pub const fn len() -> usize {
         12 + 33 + 32 + 64 + 1 + 1 + 4 + 4 + 8 + 1
     }
 
+    #[must_use]
+    pub const fn is_empty() -> bool {
+        false
+    }
+
     /// Creates a new Catalog Header struct using the provided parameters.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(metadata: [u8; 8]) -> Result<Self, Error> {
         //type Error = CarbonadoError;
         let cbor_data = serde_cbor::to_vec(&metadata)?;
-        println!("cbor data; {:?}", cbor_data);
+        debug!("cbor data; {cbor_data:?}");
 
         let cbor_leng = cbor_data.len() as u8;
 
-        // cbor length is header length
-        println!("cbor length ; {:?}", cbor_leng);
+        debug!("cbor length ; {cbor_leng:?}");
 
         Ok(CatHeader {
             cbor_len: cbor_leng,
@@ -105,7 +108,8 @@ impl CatHeader {
             vec![0_u8; 8]
         };
 
-        debug!(">>>> CBORE BYTES LENGTH : {}", self.cbor_len);
+        let cbor_len = self.cbor_len;
+        debug!(">>>> CBORE BYTES LENGTH : {cbor_len}");
 
         let mut cat_header = Vec::new();
 
@@ -139,6 +143,6 @@ impl CatHeader {
 pub fn encode_cbor(cat_header: Option<[u8; 8]>) -> Result<(), Error> {
     // Serialize to CBOR
     let cbor_data = serde_cbor::to_vec(&cat_header)?;
-    println!("cbor data; {:?}", cbor_data);
+    debug!("cbor data; {cbor_data:?}");
     Ok(())
 }

@@ -1,6 +1,6 @@
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Read, Seek, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     pin::Pin,
     sync::{Arc, RwLock},
@@ -8,17 +8,14 @@ use std::{
 
 use tokio::sync::watch;
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{Error, Result, anyhow};
 use bytes::{Bytes, BytesMut};
-use carbonado::{
-    constants::Format,
-    file::Header,
-    structs::{Encoded, Secp256k1PubKey},
-};
-use chrono::{NaiveDateTime, TimeZone, Utc};
-use futures_util::{stream, Stream, StreamExt, TryStreamExt};
+use carbonado::{constants::Format, file::Header, structs::Encoded};
+use chrono::{DateTime, Utc};
+use futures_util::{Stream, StreamExt, TryStreamExt, stream};
 use log::{debug, trace};
 use par_stream::{ParStreamExt, TryParStreamExt};
+use rand::RngCore;
 use rayon::{
     prelude::{IndexedParallelIterator, ParallelIterator},
     slice::ParallelSlice,
@@ -27,14 +24,14 @@ use secp256k1::{PublicKey, SecretKey};
 use tokio::sync::Mutex;
 
 use crate::{
-    config::{ensure_pk_dirs_exist, file_path, node_shared_secret, SYS_CFG},
+    config::{SYS_CFG, ensure_pk_dirs_exist, file_path, node_shared_secret},
     header::CatHeader,
     prelude::*,
 };
 
 pub type FileStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
 
-pub async fn write_file<'a>(
+pub async fn write_file(
     pk: &Secp256k1PubKey,
     file_stream: FileStream,
     file_name: FileName,
@@ -44,7 +41,6 @@ pub async fn write_file<'a>(
     let ss = node_shared_secret(&pk.into_inner())?.secret_bytes();
     let write_pk = PublicKey::from_secret_key_global(&SecretKey::from_slice(&ss)?);
     let write_pk_str = write_pk.to_string();
-    let pk_bytes = write_pk.serialize();
     let (x_only_pk, _) = write_pk.x_only_public_key();
 
     ensure_pk_dirs_exist(&write_pk_str).await?;
@@ -61,6 +57,7 @@ pub async fn write_file<'a>(
     let current_mime_type = Arc::new(Mutex::new(mime_type_receiver.borrow().clone()));
     let mime_type_receiver_clone = mime_type_receiver.clone();
     let current_mime_type_clone = current_mime_type.clone();
+    let write_pk_str_for_segments = write_pk_str.clone();
 
     let segment_hashes: Vec<BaoHash> = file_stream
         .map(move |segment: Result<Bytes>| {
@@ -74,6 +71,7 @@ pub async fn write_file<'a>(
         .try_par_then(None, move |segment: Bytes| {
             let current_mime_type = Arc::clone(&current_mime_type_clone);
             let mut mime_type_receiver = mime_type_receiver_clone.clone();
+            let write_pk_str = write_pk_str_for_segments.clone();
 
             debug!("Process segment");
 
@@ -86,15 +84,19 @@ pub async fn write_file<'a>(
                 }
 
                 trace!("Encoding segment");
-                let encoded_segment = carbonado::encode(&pk_bytes, &segment, NODE_FORMAT)?;
+                let mut payload_nonce = [0u8; 16];
+                rand::thread_rng().fill_bytes(&mut payload_nonce);
+                let encoded_segment =
+                    carbonado::encode_with_nonce(&ss, &segment, NODE_FORMAT, Some(payload_nonce))?;
                 trace!("Writing segment");
-                let segment_hash = write_segment(&ss, &pk_bytes, &encoded_segment)?;
+                let segment_hash =
+                    write_segment(&ss, &write_pk_str, payload_nonce, &encoded_segment)?;
                 trace!("Segment hash: {segment_hash}");
 
                 Ok::<BaoHash, Error>(segment_hash)
             }
         })
-        .try_collect()
+        .try_collect::<Vec<BaoHash>>()
         .await?;
 
     let file_hash = Blake3Hash(file_hasher.read().expect("write_file read lock").finalize());
@@ -134,14 +136,19 @@ pub async fn write_file<'a>(
     Ok(file_hash)
 }
 
-pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash> {
+pub fn write_segment(
+    master_key: &[u8],
+    write_pk_str: &str,
+    payload_nonce: [u8; 16],
+    encoded: &Encoded,
+) -> Result<BaoHash> {
     let Encoded(encoded_bytes, bao_hash, encode_info) = encoded;
     trace!("Encoded bytes len: {}", encoded_bytes.len());
 
     let encoded_chunk_size = encode_info.bytes_verifiable as usize / SYS_CFG.volumes.len();
     trace!("Encoded chunk size: {}", encoded_chunk_size);
 
-    let metadata = std::option::Option::Some([0_u8; 8]);
+    let metadata = Some([0_u8; 8]);
 
     encoded_bytes
         .par_chunks_exact(encoded_chunk_size)
@@ -149,11 +156,12 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
         .map(|(chunk_index, encoded_segment_chunk)| {
             let format = Format::from(NODE_FORMAT);
             let header = Header::new(
-                sk,
-                pk,
+                master_key,
+                payload_nonce,
                 bao_hash.as_bytes(),
+                [0u8; 32],
                 format,
-                chunk_index as u8,
+                chunk_index as u32,
                 encode_info.output_len,
                 encode_info.padding_len,
                 metadata,
@@ -162,7 +170,7 @@ pub fn write_segment(sk: &[u8], pk: &[u8], encoded: &Encoded) -> Result<BaoHash>
             let header_bytes = header.try_to_vec()?;
             let file_name = header.file_name();
 
-            let path = file_path(chunk_index, &hex::encode(pk), SEGMENT_DIR, &file_name)?;
+            let path = file_path(chunk_index, write_pk_str, SEGMENT_DIR, &file_name)?;
 
             trace!("Write segment at {path:?}");
             let mut file = OpenOptions::new()
@@ -193,8 +201,9 @@ pub async fn write_catalog(
         .flat_map(|bao_hash| bao_hash.to_bytes())
         .collect();
 
-    let date_utc = Utc.from_utc_datetime(&NaiveDateTime::from_timestamp_opt(61, 0).unwrap());
-    let date = date_utc.to_string();
+    let date = DateTime::<Utc>::from_timestamp(61, 0)
+        .expect("unix timestamp 61 is in range")
+        .to_string();
     let mime_type = mime_type.to_string();
 
     debug!("Write catalog  mime_type to meda-data {}", mime_type);
@@ -236,7 +245,7 @@ pub async fn write_catalog(
                 debug!("Open catalog file at {path:?}");
                 // JSON FORMATTED CBOR DATA ENDPOINT
                 let decoded_cbor_data: CborData = serde_cbor::from_slice(&cbor_data)?;
-                debug!(">>> JSON DATA decoded_cbpr_data; {:?}", decoded_cbor_data);
+                debug!(">>> JSON DATA decoded_cbpr_data; {decoded_cbor_data:?}");
 
                 trace!("Open catalog file at {path:?}");
                 let mut file = OpenOptions::new()
@@ -253,7 +262,7 @@ pub async fn write_catalog(
                 Ok::<(), Error>(())
             }
         })
-        .try_collect()
+        .try_collect::<()>()
         .await?;
 
     debug!("Finished write_catalog");
@@ -283,11 +292,19 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                     0,
                     &write_pk_str,
                     SEGMENT_DIR,
-                    &format!("{}.c{}", segment_hash, NODE_FORMAT),
+                    &format!("{segment_hash}.c{NODE_FORMAT}"),
                 )?;
 
-                let mut chunk_file = OpenOptions::new().read(true).open(chunk_path)?;
-                let header = Header::try_from(&chunk_file)?;
+                let mut chunk_file = OpenOptions::new().read(true).open(&chunk_path)?;
+                let mut volume0_bytes = vec![];
+                chunk_file.read_to_end(&mut volume0_bytes)?;
+                if volume0_bytes.len() < Header::LEN {
+                    return Err(anyhow!(
+                        "segment shorter than Carbonado v2 header ({} bytes)",
+                        volume0_bytes.len()
+                    ));
+                }
+                let header = Header::try_from(&volume0_bytes[..Header::LEN])?;
 
                 let segment: Vec<u8> = if SYS_CFG.drive_redundancy > 1 {
                     let segment_hash = segment_hash.to_string();
@@ -301,17 +318,23 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
                                     volume_index,
                                     &write_pk_str,
                                     SEGMENT_DIR,
-                                    &format!("{}.c{}", segment_hash, NODE_FORMAT),
+                                    &format!("{segment_hash}.c{NODE_FORMAT}"),
                                 )?;
 
                                 let mut file = OpenOptions::new().read(true).open(path)?;
 
                                 let mut bytes = vec![];
                                 file.read_to_end(&mut bytes)?;
+                                if bytes.len() < Header::LEN {
+                                    return Err(anyhow!(
+                                        "segment shorter than Carbonado v2 header ({} bytes)",
+                                        bytes.len()
+                                    ));
+                                }
 
-                                let (_header, chunk) = bytes.split_at(Header::len());
+                                let chunk = bytes.split_off(Header::LEN);
 
-                                Ok(Bytes::from(chunk.to_vec()))
+                                Ok(Bytes::from(chunk))
                             }
                         })
                         .collect::<Vec<Result<Bytes>>>()
@@ -327,11 +350,7 @@ pub fn read_file(pk: &Secp256k1PubKey, lookup: &Lookup) -> Result<FileStream> {
 
                     segment.to_vec()
                 } else {
-                    let mut bytes = vec![];
-                    chunk_file.rewind()?;
-                    chunk_file.read_to_end(&mut bytes)?;
-                    let (_header, chunk) = bytes.split_at(Header::len());
-                    chunk.to_vec()
+                    volume0_bytes.split_off(Header::LEN)
                 };
 
                 let bytes = carbonado::decode(
@@ -364,9 +383,10 @@ pub fn read_catalog(write_pk_str: &str, lookup: &Lookup) -> Result<Vec<BaoHash>>
     // Split the CatHeader bytes from the content bytes
     let (_cat_header, content_bytes) = bytes.split_at(25);
 
-    let bao_hashes = content_bytes
-        .chunks_exact(bao::HASH_SIZE)
-        .map(BaoHash::try_from)
+    let (chunks, _) = content_bytes.as_chunks::<{ bao::HASH_SIZE }>();
+    let bao_hashes = chunks
+        .iter()
+        .map(|chunk| BaoHash::try_from(chunk.as_slice()))
         .collect::<Result<Vec<BaoHash>>>()?;
 
     Ok(bao_hashes)
@@ -374,7 +394,6 @@ pub fn read_catalog(write_pk_str: &str, lookup: &Lookup) -> Result<Vec<BaoHash>>
 
 #[allow(unused_variables)]
 pub fn delete_file(pk: Secp256k1PubKey, file_bytes: &[u8]) -> Result<()> {
-    let pk_bytes = pk.to_bytes();
     let (x_only_pk, _) = pk.into_inner().x_only_public_key();
 
     let file_hash = Blake3Hash(blake3::keyed_hash(&x_only_pk.serialize(), file_bytes));
