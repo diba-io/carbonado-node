@@ -2,7 +2,7 @@
 name = "carbonado-node"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.98"
+rust-version = "1.99"
 
 [[bin]]
 name = "carbonadod"
@@ -24,7 +24,7 @@ bytes = "1.5.0"
 # library consumer (encode/decode + Header). pqc/cli/ots pull bitcoinpqc CMake.
 # See [crates.io carbonado 0.7.0](https://crates.io/crates/carbonado/0.7.0)
 # (accessed: 2026-08-27).
-carbonado = { version = "0.7.0", default-features = false, features = ["backend-rust", "parallel"] }
+carbonado = { version = "=0.7.0", default-features = false, features = ["backend-rust", "parallel"] }
 chrono = "0.4.31"
 clap = { version = "4.4.11", features = ["derive"] }
 directories = "5.0.1"

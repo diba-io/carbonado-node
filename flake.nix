@@ -4,9 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    # Binary Rust toolchains. Pin 1.98.0; nixpkgs-unstable rustc lagged this release.
-    # https://blog.rust-lang.org/2026/08/20/Rust-1.98.0/ (accessed: 2026-08-24).
-    # https://github.com/oxalica/rust-overlay (accessed: 2026-08-24).
+    # Binary Rust toolchains. Pin 1.99.0; nixpkgs-unstable rustc lagged this release.
+    # https://blog.rust-lang.org/2026/10/01/Rust-1.99.0/ (accessed: 2026-10-09).
+    # https://github.com/oxalica/rust-overlay (accessed: 2026-10-09).
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -40,7 +40,7 @@
             overlays = [ rust-overlay.overlays.default ];
           };
 
-          rustToolchain = pkgs.rust-bin.stable."1.98.0".minimal.override {
+          rustToolchain = pkgs.rust-bin.stable."1.99.0".minimal.override {
             extensions = [
               "rust-src"
               "rustfmt"
